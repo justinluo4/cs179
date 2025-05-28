@@ -9,6 +9,8 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <sys/stat.h> // For mkdir (POSIX)
+#include <sys/types.h> // For mkdir (POSIX)
 
 #include "file_io.h"
 
@@ -61,22 +63,6 @@ struct RayTraceResult {
 
     RayTraceResult() : finalDir(0,0,0), hitEventHorizon(false) {}
 };
-
-// Test function to read a BMP and save it back out, to verify read/write integrity
-void testAndSaveOriginalBMP(const std::string& inputFilename, const std::string& outputFilename) {
-    int width, height;
-    std::cout << "Testing BMP read/write by copying " << inputFilename << " to " << outputFilename << std::endl;
-    std::vector<unsigned char> imageData = readBMP(inputFilename.c_str(), width, height);
-
-    if (imageData.empty()) {
-        std::cerr << "Failed to read " << inputFilename << " for copy test." << std::endl;
-        return;
-    }
-
-    std::cout << "Read " << inputFilename << " for copy test: " << width << "x" << height << std::endl;
-    saveBMP(outputFilename, imageData, width, height);
-    std::cout << "Copy test finished. Check " << outputFilename << std::endl;
-}
 
 struct Camera {
     Vec3f position;
@@ -245,86 +231,129 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     // The x-axis of the 2D integration plane (in 3D space) is the original ray direction.
     Vec3f x_axis_2d_plane = rayDir; 
 
-    // The z-axis of this 2D integration plane (normal to the plane)
-    Vec3f z_axis_2d_plane = x_axis_2d_plane.cross(y_axis_2d_plane).normalize();
+    // The z-axis of this 2D integration plane (normal to the plane) -- not strictly needed for 2D var updates
+    // Vec3f z_axis_2d_plane = x_axis_2d_plane.cross(y_axis_2d_plane).normalize();
 
-    // Initial state for 2D integration:
-    // The ray starts far away, say at s = -s_max_integration_dist, moving towards s = +s_max_integration_dist
-    // The black hole is effectively at (x_2d=0, y_2d=0) in the coordinates of the ODEs.
-    // So, the light ray starts at x_2d = some_large_negative_value, y_2d = b_impact_param_3d (the 2D impact parameter).
     float s_max_integration_dist = INTEGRATION_DISTANCE_MULTIPLIER * BH_RSCHWARZSCHILD_RADIUS;
-    if (s_max_integration_dist < b_impact_param_3d * 2.0f) { // Ensure integration starts far enough if impact param is large
-        s_max_integration_dist = b_impact_param_3d * 2.0f;
+    if (s_max_integration_dist < b_impact_param_3d * 2.5f) { // Ensure integration starts/ends far enough if impact param is large
+        s_max_integration_dist = b_impact_param_3d * 2.5f;
     }
-    if (s_max_integration_dist < 10.0f * BH_RSCHWARZSCHILD_RADIUS) { // Minimum integration distance if EH is large
-        s_max_integration_dist = 10.0f * BH_RSCHWARZSCHILD_RADIUS;
+    if (s_max_integration_dist < 20.0f * BH_RSCHWARZSCHILD_RADIUS) { // Minimum integration distance, esp. if EH is large or b is small
+        s_max_integration_dist = 20.0f * BH_RSCHWARZSCHILD_RADIUS;
     }
+    if (s_max_integration_dist <= 0.0f) s_max_integration_dist = 10.0f; // Fallback if rs is zero or very small
 
+    // Initial 2D state variables for the ODEs:
+    float x_pos = -s_max_integration_dist;    // Ray starts far to the "left" of BH (BH at origin of this 2D system)
+    float y_pos = b_impact_param_3d;          // Offset by the impact parameter
 
-    // 2D state variables for the ODEs: (x, y) position, (vx, vy) "velocity" (direction components)
-    float x = -s_max_integration_dist;         // Ray starts far to the "left" of BH
-    float y = b_impact_param_3d;             // Offset by the impact parameter
-    float vx = 1.0f;                         // Initially moving purely in +x direction (normalized speed)
-    float vy = 0.0f;
+    float r_init = std::sqrt(x_pos * x_pos + y_pos * y_pos);
+    if (r_init <= EVENT_HORIZON_RADIUS) { // Should not happen if s_max_integration_dist is large enough
+        result.hitEventHorizon = true;
+        return result;
+    }
+    float term_rs_over_r_init = BH_RSCHWARZSCHILD_RADIUS / r_init;
+    if (std::abs(1.0f - term_rs_over_r_init) < EPSILON_BH || (1.0f - term_rs_over_r_init) <= 0.0f) {
+         result.hitEventHorizon = true; // n is undefined or infinite at start, likely too close or error
+         return result;
+    }
+    float n_init = 1.0f / (1.0f - term_rs_over_r_init);
+
+    float px_val = n_init * 1.0f; // Initial direction (1,0) in 2D plane, so p_x = n*1
+    float py_val = n_init * 0.0f; // p_y = n*0
 
     float ds_step = (2.0f * s_max_integration_dist) / static_cast<float>(NUM_INTEGRATION_STEPS);
 
     for (int i = 0; i < NUM_INTEGRATION_STEPS; ++i) {
-        float r_sq = x * x + y * y;
-        float r = std::sqrt(r_sq);
+        float r_sq = x_pos * x_pos + y_pos * y_pos;
+        float r_current = std::sqrt(r_sq);
 
-        if (r < EVENT_HORIZON_RADIUS) {
+        if (r_current <= EVENT_HORIZON_RADIUS) {
             result.hitEventHorizon = true;
             return result;
         }
 
-        // Avoid division by zero if r is extremely small (though EH check should catch it)
-        float r_cubed = r_sq * r;
-        if (r_cubed < EPSILON_BH * EPSILON_BH * EPSILON_BH) { // Avoid div by zero if somehow past EH
-             // This case should ideally not be reached if EH check is robust.
-             // If it is, the ray is extremely close to the singularity; treat as absorbed or highly chaotic.
-             result.hitEventHorizon = true; // Or just return undeflected if that makes more sense for an edge case
+        float term_rs_over_r_current = BH_RSCHWARZSCHILD_RADIUS / r_current;
+        // Check for r_current being too close to rs or inside, making n undefined or problematic
+        if (std::abs(1.0f - term_rs_over_r_current) < EPSILON_BH) { 
+            // At or very near photon sphere, n approaches infinity. Ray path is highly unstable.
+            // Depending on definition, could treat as absorbed or scattered unpredictably.
+            result.hitEventHorizon = true; // Simplification: treat as absorbed / too unstable
+            return result;
+        }
+        if ((1.0f - term_rs_over_r_current) <= 0.0f) { // Inside Schwarzschild radius, n is ill-defined in this formula for external space
+            result.hitEventHorizon = true; // Should have been caught by r_current <= EVENT_HORIZON_RADIUS
+            return result;
+        }
+        float n_current = 1.0f / (1.0f - term_rs_over_r_current);
+        
+        // Avoid division by zero for r_cubed if r_current is extremely small (though EH check should catch it)
+        if (r_current < EPSILON_BH) { 
+             result.hitEventHorizon = true; 
              return result;
         }
+        float r_cubed = r_sq * r_current;
 
-        // Equations from user: dvx/ds = -rs * x / r^3, dvy/ds = -rs * y / r^3
-        // (Assuming n=1, c=1 in these units, so 2GM = rs)
-        float common_factor = -BH_RSCHWARZSCHILD_RADIUS / r_cubed;
+        // dp_x/ds = -n^2 * rs * x / r^3
+        // dp_y/ds = -n^2 * rs * y / r^3
+        float accel_common_factor = -n_current * n_current * BH_RSCHWARZSCHILD_RADIUS / r_cubed;
+        float dp_x = accel_common_factor * x_pos * ds_step;
+        float dp_y = accel_common_factor * y_pos * ds_step;
+
+        // dx/ds = p_x / n
+        // dy/ds = p_y / n
+        // Note: n_current can be very large if r_current is close to rs.
+        // If n_current is huge, dx/ds and dy/ds become small (speed of light slowdown near BH).
+        float dx = (px_val / n_current) * ds_step;
+        float dy = (py_val / n_current) * ds_step;
+
+        px_val += dp_x;
+        py_val += dp_y;
         
-        float dvx = common_factor * x * ds_step;
-        float dvy = common_factor * y * ds_step;
+        x_pos += dx;
+        y_pos += dy;
 
-        vx += dvx;
-        vy += dvy;
-        
-        // Normalize velocity vector to maintain it as a direction (optional but good practice for some integrators)
-        // For simple Euler, it might accumulate error, but let's try without first.
-        // float v_len = std::sqrt(vx*vx + vy*vy);
-        // if (v_len > EPSILON_BH) { vx /= v_len; vy /= v_len; }
-
-        x += vx * ds_step;
-        y += vy * ds_step;
+        // Early exit optimization
+        if (i > NUM_INTEGRATION_STEPS / 2) { // Check only in the latter half of integration
+            if (x_pos > EPSILON_BH) { // Ray is on the "outgoing" side (positive x_pos)
+                bool is_moving_radially_outward = (x_pos * px_val + y_pos * py_val) > 0;
+                // r_current was calculated at the beginning of this loop iteration
+                if (is_moving_radially_outward && (r_current > s_max_integration_dist * 0.90f)) {
+                    // std::cout << "Early exit at step " << i << " for ray with b=" << b_impact_param_3d << std::endl;
+                    break; // Exit integration loop early
+                }
+            }
+        }
     }
 
-    // After integration, (vx, vy) is the final 2D direction in the integration plane.
-    // We need to convert this 2D direction back to a 3D world direction.
-    // The original ray direction `x_axis_2d_plane` corresponds to (1,0) in 2D before deflection.
-    // The `y_axis_2d_plane` corresponds to (0,1) in 2D before deflection.
-    // The final 3D direction is a linear combination of these axes based on the final (vx, vy).
-    // However, the (vx, vy) are components of the *deflected path* in the 2D plane coordinates where the ray started along x.
-    // The final 2D direction (vx, vy) needs to be normalized.
-    float final_v_len = std::sqrt(vx * vx + vy * vy);
-    if (final_v_len < EPSILON_BH) {
-        // Velocity is near zero, something went wrong or ray stopped. Return original.
+    // After integration, convert final optical momentum (px_val, py_val) to a 2D direction vector T = p/n.
+    float r_final = std::sqrt(x_pos*x_pos + y_pos*y_pos); 
+    if (r_final <= EVENT_HORIZON_RADIUS) { // Final check just in case last step entered EH
+        result.hitEventHorizon = true;
+        return result;
+    }
+    float term_rs_over_r_final = BH_RSCHWARZSCHILD_RADIUS / r_final;
+    if (std::abs(1.0f - term_rs_over_r_final) < EPSILON_BH || (1.0f - term_rs_over_r_final) <= 0.0f) {
+         result.hitEventHorizon = true; // n is undefined or infinite at end, consider ray lost
+         return result;
+    }
+    float n_final = 1.0f / (1.0f - term_rs_over_r_final);
+
+    float final_tx = px_val / n_final;
+    float final_ty = py_val / n_final;
+
+    // Normalize the final 2D direction vector due to potential accumulated numerical errors.
+    float final_t_len = std::sqrt(final_tx * final_tx + final_ty * final_ty);
+    if (final_t_len < EPSILON_BH) {
+        // Direction is near zero, something went wrong. Return original (undeflected) direction.
+        // Or, if this happens after strong interaction, it might be better to mark as absorbed.
+        // For now, let's assume it implies an issue and return undeflected or last known good direction.
+        result.finalDir = rayDir; // Fallback to initial rayDir
         return result; 
     }
-    float final_vx_norm = vx / final_v_len;
-    float final_vy_norm = vy / final_v_len;
+    float final_vx_norm = final_tx / final_t_len;
+    float final_vy_norm = final_ty / final_t_len;
 
-    // Reconstruct the 3D direction:
-    // The ray initially traveled along x_axis_2d_plane.
-    // Its final direction has a component final_vx_norm along the original x_axis_2d_plane
-    // and a component final_vy_norm along the y_axis_2d_plane.
     result.finalDir = (x_axis_2d_plane * final_vx_norm + y_axis_2d_plane * final_vy_norm).normalize();
 
     return result;
@@ -400,42 +429,101 @@ std::vector<unsigned char> renderPerspective(
 }
 
 int main() {
-    // Test the BMP read/write functions directly
-    testAndSaveOriginalBMP("../assets/galaxy.bmp", "background_direct_copy.bmp");
+    const char* frame_output_dir = "frames_temp";
 
-    // Original rendering code - you can comment this out or run it after the test
-    int width, height;
-    std::vector<unsigned char> imageData = readBMP("../assets/galaxy.bmp", width, height);
+    // Create the output directory if it doesn't exist (POSIX specific)
+    // For Windows, you might need #include <direct.h> and _mkdir()
+    // Or use C++17 <filesystem> if available and preferred.
+    struct stat st = {0};
+    if (stat(frame_output_dir, &st) == -1) { // Check if directory exists
+        #if defined(_WIN32) || defined(_WIN64)
+            // For Windows, you would use _mkdir(frame_output_dir) from <direct.h>
+            // This example focuses on POSIX for now.
+            std::cout << "Attempting to create directory (Windows placeholder): " << frame_output_dir << std::endl;
+            // if (_mkdir(frame_output_dir) != 0) { // Placeholder, requires #include <direct.h>
+            //     std::cerr << "Error: Could not create directory " << frame_output_dir << std::endl;
+            //     return 1; // Exit if directory creation fails
+            // }
+        #else 
+            // POSIX mkdir (Linux, macOS)
+            std::cout << "Creating directory: " << frame_output_dir << std::endl;
+            if (mkdir(frame_output_dir, 0775) != 0 && errno != EEXIST) { // 0775 gives rwx for owner/group, r-x for others
+                std::cerr << "Error: Could not create directory " << frame_output_dir << ". Errno: " << errno << std::endl;
+                perror("mkdir error"); // More detailed error
+                return 1; // Exit if directory creation fails
+            }
+        #endif
+    }
+
+    int bg_width, bg_height;
+    std::vector<unsigned char> backgroundImageData = readBMP("../assets/galaxy.bmp", bg_width, bg_height);
+
+    if (backgroundImageData.empty()) {
+        std::cerr << "Failed to load background image. Exiting." << std::endl;
+        return 1;
+    }
     
-    std::cout << "Successfully read BMP image with dimensions: " << width << "x" << height << std::endl;
-    std::cout << "Total pixels: " << width * height << std::endl;
-    std::cout << "Image data size: " << imageData.size() << " bytes" << std::endl;
+    std::cout << "Successfully read background BMP image with dimensions: " << bg_width << "x" << bg_height << std::endl;
 
-    // Define camera parameters
-    Vec3f cameraPosition(0.0f, 0.0f, 0.0f);    // Camera at origin
-    Vec3f lookAtTarget(1.0f, 0.0f, 0.0f);   // Looking down the -Z axis
-    Vec3f worldUpVector(0.0f, 0.0f, 1.0f);     // Y is up
-    float fieldOfViewY = 100.0f;                // 60 degrees vertical FOV
+    // Animation Parameters
+    const int num_frames = 120; // Number of frames for the animation (e.g., 5 seconds at 24 fps)
+    const float orbit_radius = 60.0f; // Radius of the camera's orbit around BH_POSITION
+    // const float camera_z_offset = BH_POSITION.z + 20.0f; // Optional: elevate camera slightly
+    const float camera_z_offset = BH_POSITION.z; // Keep camera in the same z-plane as BH for simplicity
 
-    Camera camera(cameraPosition, lookAtTarget, worldUpVector, fieldOfViewY);
-
-    // Define output image dimensions
-    int outputWidth = 1280;
-    int outputHeight = 720;
-
-    std::cout << "Rendering perspective image..." << std::endl;
-    std::vector<unsigned char> renderedImage = renderPerspective(
-        camera,
-        imageData,     // Background (equirectangular) image data
-        width,         // Background image width
-        height,        // Background image height
-        outputWidth,
-        outputHeight
-    );
+    // Camera parameters that change per frame are position and lookAt (always BH_POSITION)
+    // worldUp and fovY can remain constant for this animation
+    Vec3f worldUpVector(0.0f, 0.0f, 1.0f);     // Z is up for the camera
+    float fieldOfViewY = 75.0f;                // Wider FOV might be nice
     
+    // Define output image dimensions (user already set these)
+    int outputWidth = 720;
+    int outputHeight = 480;
 
-    // Save the rendered image
-    saveBMP("rendered_galaxy2.bmp", renderedImage, outputWidth, outputHeight);
+    char filename_buffer[256]; // For formatting output filenames
+
+    std::cout << "Starting animation rendering: " << num_frames << " frames." << std::endl;
+    std::cout << "Frames will be saved in: " << frame_output_dir << "/" << std::endl;
+
+    for (int frame = 0; frame < num_frames; ++frame) {
+        float angle = PI/2 + PI * static_cast<float>(frame) / static_cast<float>(num_frames);
+
+        // Camera orbits in the XY plane around BH_POSITION
+        Vec3f cameraPosition(
+            BH_POSITION.x + orbit_radius * std::cos(angle),
+            BH_POSITION.y + orbit_radius * std::sin(angle),
+            camera_z_offset 
+        );
+        
+        // Camera always looks at the black hole
+        Vec3f lookAtTarget = BH_POSITION;
+
+        Camera camera(cameraPosition, lookAtTarget, worldUpVector, fieldOfViewY);
+
+        snprintf(filename_buffer, sizeof(filename_buffer), "%s/frame_%04d.bmp", frame_output_dir, frame);
+        std::cout << "Rendering frame " << (frame + 1) << "/" << num_frames << " to " << filename_buffer << "..." << std::endl;
+
+        std::vector<unsigned char> renderedImage = renderPerspective(
+            camera,
+            backgroundImageData,
+            bg_width,
+            bg_height,
+            outputWidth,
+            outputHeight
+        );
+    
+        if (!renderedImage.empty()) {
+            saveBMP(filename_buffer, renderedImage, outputWidth, outputHeight);
+        } else {
+            std::cerr << "Error: renderPerspective returned an empty image for frame " << frame << std::endl;
+            // Optionally create a dummy/error frame or skip
+        }
+    }
+
+    std::cout << "Animation rendering finished." << std::endl;
+    std::cout << "You can now use a tool like ffmpeg to create a video from the frame_xxxx.bmp files." << std::endl;
+    std::cout << "Example ffmpeg command:" << std::endl;
+    std::cout << "ffmpeg -framerate 24 -i frame_%04d.bmp -c:v libx264 -pix_fmt yuv420p output_video.mp4" << std::endl;
     
     return 0;
 }
