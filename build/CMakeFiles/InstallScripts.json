@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"/home/jluo2/cs179/build/cmake_install.cmake"
+		"/home/sadeshmu/cs179/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
