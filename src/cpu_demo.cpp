@@ -21,9 +21,22 @@ struct Vec3f {
 
     Vec3f(float x = 0.0f, float y = 0.0f, float z = 0.0f) : x(x), y(y), z(z) {}
 
+    // Copy constructor
+    Vec3f(const Vec3f& other) : x(other.x), y(other.y), z(other.z) {}
+
     Vec3f operator+(const Vec3f& other) const { return Vec3f(x + other.x, y + other.y, z + other.z); }
     Vec3f operator-(const Vec3f& other) const { return Vec3f(x - other.x, y - other.y, z - other.z); }
     Vec3f operator*(float scalar) const { return Vec3f(x * scalar, y * scalar, z * scalar); }
+    Vec3f operator/(float scalar) const {
+        if (scalar == 0.0f) {
+            // Handle division by zero, e.g., return a zero vector or throw an error
+            // For simplicity, returning a zero vector here.
+            // Consider logging an error or throwing an exception in a real application.
+            std::cerr << "Warning: Division by zero in Vec3f operator/" << std::endl;
+            return Vec3f(0.0f, 0.0f, 0.0f);
+        }
+        return Vec3f(x / scalar, y / scalar, z / scalar);
+    }
     float dot(const Vec3f& other) const { return x * other.x + y * other.y + z * other.z; }
     Vec3f cross(const Vec3f& other) const {
         return Vec3f(
@@ -38,6 +51,12 @@ struct Vec3f {
         if (l == 0.0f) return Vec3f(0.0f, 0.0f, 0.0f); // Or handle error
         return Vec3f(x / l, y / l, z / l);
     }
+    Vec3f& operator+=(const Vec3f& other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
 };
 
 // Overload the << operator for Vec3f for easy printing
@@ -47,7 +66,7 @@ std::ostream& operator<<(std::ostream& os, const Vec3f& v) {
 }
 
 // Black Hole Parameters & Ray Tracing Constants
-const Vec3f BH_POSITION(50.0f, 0.0f, 0.0f); // Example: In front of camera if camera looks along +X
+const Vec3f BH_POSITION(50.0f, 0.0f, -50.0f); // Example: In front of camera if camera looks along +X
 const float BH_RSCHWARZSCHILD_RADIUS = 2.0f; // Schwarzschild radius. Adjust for visual effect.
 const float EVENT_HORIZON_RADIUS = BH_RSCHWARZSCHILD_RADIUS;
 // const float PHOTON_SPHERE_RADIUS = 1.5f * BH_RSCHWARZSCHILD_RADIUS; // For reference
@@ -56,12 +75,23 @@ const float INTEGRATION_DISTANCE_MULTIPLIER = 50.0f; // How far from BH (in rs u
 const int NUM_INTEGRATION_STEPS = 200;       // Number of steps for Euler integration
 const float EPSILON_BH = 1e-4f;                   // Small number to avoid division by zero near BH center
 
+// Accretion Disk Parameters
+const Vec3f DISK_NORMAL(0.0f, 0.0f, 1.0f);     // Disk lies in XY plane (normal along Z), centered at BH_POSITION
+const float DISK_INNER_RADIUS = EVENT_HORIZON_RADIUS * 3.0f;  // e.g., ISCO for Schwarzschild BH is 3*rs = 6GM/c^2
+const float DISK_OUTER_RADIUS = EVENT_HORIZON_RADIUS * 15.0f; // Outer extent of the disk
+const Vec3f DISK_BASE_COLOR(1.0f, 1.0f, 1.0f);   // Base color is white
+const float DISK_MAX_BRIGHTNESS = 0.7f;         // Max brightness multiplier from procedural texture for the white color
+
+
+
+
 // struct RayTraceResult MUST be defined after Vec3f but before its use
 struct RayTraceResult {
     Vec3f finalDir;       // The final direction of the ray after passing the black hole
     bool hitEventHorizon; // True if the ray entered the event horizon
-
-    RayTraceResult() : finalDir(0,0,0), hitEventHorizon(false) {}
+    Vec3f accumulatedColor; // Accumulated color of the ray
+    bool hitDisk; // True if the ray entered the accretion disk
+    RayTraceResult() : finalDir(0,0,0), hitEventHorizon(false), accumulatedColor(0,0,0), hitDisk(false) {}
 };
 
 struct Camera {
@@ -138,6 +168,35 @@ std::vector<unsigned char> getPixelFromDirection(
     return {r, g, b};
 }
 
+float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane, const Vec3f& disk_center_on_plane) {
+    // Calculate distance from point to center in the plane
+    float dx = point_on_disk_plane.x - disk_center_on_plane.x;
+    float dy = point_on_disk_plane.y - disk_center_on_plane.y;
+    float distance = std::sqrt(dx*dx + dy*dy);
+
+    if (distance < DISK_INNER_RADIUS || distance > DISK_OUTER_RADIUS) {
+        return 0.0f; // Outside the actual disk annulus
+    }
+    if (distance < EPSILON_BH) distance = EPSILON_BH; // Avoid division by zero if at exact center (though inner radius should prevent)
+
+    float theta = std::atan2(dy, dx);
+    // r_tex is a normalized radius for texture pattern, different from physical distance 'r' in ODEs
+    float r_tex_normalized = distance / DISK_OUTER_RADIUS; 
+
+    // Original formula: 1 + (std::sin(6*theta + r_tex_normalized))/r_tex_normalized + 1/r_tex_normalized;
+    // This can be very large or negative. Let's make it more controlled for brightness [0,1] type factor.
+    // Example: Brighter towards center, with some angular modulation.
+    float radial_factor = 1.0f - ( (distance - DISK_INNER_RADIUS) / (DISK_OUTER_RADIUS - DISK_INNER_RADIUS) ); // 1 at inner, 0 at outer
+    radial_factor = std::max(0.0f, std::min(1.0f, radial_factor)); // clamp [0,1]
+    
+    float angular_factor = 0.8f + 0.2f * std::sin(6.0f * theta + 10.0f * r_tex_normalized * r_tex_normalized ); // Modulates between 0.6 and 1.0
+
+    float brightness = DISK_MAX_BRIGHTNESS * radial_factor * angular_factor;
+    
+    return std::max(0.0f, std::min(DISK_MAX_BRIGHTNESS, brightness)); // Final clamp
+}
+
+
 // Traces a ray near a black hole using 2D numerical integration.
 // rayOrigin: The starting point of the ray (e.g., camera position, but effectively infinity for this model).
 // rayDir: The initial direction of the ray (normalized).
@@ -174,29 +233,29 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     // Intersection of a ray (O + tD) with a sphere (center C, radius R_eh):
     // (D.D)t^2 + 2D.(O-C)t + (O-C).(O-C) - R_eh^2 = 0
     // Here, O=rayOrigin, D=rayDir, C=BH_POSITION, R_eh=EVENT_HORIZON_RADIUS
-    Vec3f O_minus_C = rayOrigin - BH_POSITION;
-    float a_quad = rayDir.dot(rayDir); // Should be 1.0 if rayDir is normalized
-    float b_quad = 2.0f * rayDir.dot(O_minus_C);
-    float c_quad = O_minus_C.dot(O_minus_C) - EVENT_HORIZON_RADIUS * EVENT_HORIZON_RADIUS;
-    float discriminant = b_quad * b_quad - 4.0f * a_quad * c_quad;
+    // Vec3f O_minus_C = rayOrigin - BH_POSITION;
+    // float a_quad = rayDir.dot(rayDir); // Should be 1.0 if rayDir is normalized
+    // float b_quad = 2.0f * rayDir.dot(O_minus_C);
+    // float c_quad = O_minus_C.dot(O_minus_C) - EVENT_HORIZON_RADIUS * EVENT_HORIZON_RADIUS;
+    // float discriminant = b_quad * b_quad - 4.0f * a_quad * c_quad;
 
-    if (discriminant >= 0.0f) {
-        float t0 = (-b_quad - std::sqrt(discriminant)) / (2.0f * a_quad);
-        float t1 = (-b_quad + std::sqrt(discriminant)) / (2.0f * a_quad);
-        if (t0 > 0 || t1 > 0) { // Intersection point is in front of the ray
-            // Check if closest intersection is positive
-            float t_intersect = (t0 > 0 && t1 > 0) ? std::min(t0,t1) : std::max(t0,t1);
-            if (t_intersect > 0) {
-                 // Potentially more robust: check if the segment [origin, origin + t_intersect*dir] is close enough to BH
-                 // For now, if the infinite ray intersects, and the intersection point is in front and within a certain range
-                 // or if the closest approach point t_ca is positive and b_impact_param_3d is less than EH.
-                if (b_impact_param_3d < EVENT_HORIZON_RADIUS && t_ca > 0) {
-                    result.hitEventHorizon = true;
-                    return result;
-                }
-            }
-        }
-    }
+    // if (discriminant >= 0.0f) {
+    //     float t0 = (-b_quad - std::sqrt(discriminant)) / (2.0f * a_quad);
+    //     float t1 = (-b_quad + std::sqrt(discriminant)) / (2.0f * a_quad);
+    //     if (t0 > 0 || t1 > 0) { // Intersection point is in front of the ray
+    //         // Check if closest intersection is positive
+    //         float t_intersect = (t0 > 0 && t1 > 0) ? std::min(t0,t1) : std::max(t0,t1);
+    //         if (t_intersect > 0) {
+    //              // Potentially more robust: check if the segment [origin, origin + t_intersect*dir] is close enough to BH
+    //              // For now, if the infinite ray intersects, and the intersection point is in front and within a certain range
+    //              // or if the closest approach point t_ca is positive and b_impact_param_3d is less than EH.
+    //             if (b_impact_param_3d < EVENT_HORIZON_RADIUS && t_ca > 0) {
+    //                 result.hitEventHorizon = true;
+    //                 return result;
+    //             }
+    //         }
+    //     }
+    // }
     
     // Define the 2D integration plane.
     // The "x" axis of this 2D plane will be aligned with the original rayDir.
@@ -263,7 +322,8 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     float py_val = n_init * 0.0f; // p_y = n*0
 
     float ds_step = (2.0f * s_max_integration_dist) / static_cast<float>(NUM_INTEGRATION_STEPS);
-
+    float disk_distance = 0.0f;
+    float disk_distance_prev = 0.0f;
     for (int i = 0; i < NUM_INTEGRATION_STEPS; ++i) {
         float r_sq = x_pos * x_pos + y_pos * y_pos;
         float r_current = std::sqrt(r_sq);
@@ -288,11 +348,37 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
         float n_current = 1.0f / (1.0f - term_rs_over_r_current);
         
         // Avoid division by zero for r_cubed if r_current is extremely small (though EH check should catch it)
+
         if (r_current < EPSILON_BH) { 
              result.hitEventHorizon = true; 
              return result;
         }
         float r_cubed = r_sq * r_current;
+        Vec3f current_pos_3d = rayOrigin + rayDir * (x_pos + s_max_integration_dist) + y_axis_2d_plane * (y_pos - b_impact_param_3d);
+        Vec3f b_to_current = current_pos_3d - BH_POSITION;
+        disk_distance_prev = disk_distance;
+        disk_distance = b_to_current.dot(DISK_NORMAL);
+        Vec3f point_on_disk_plane = b_to_current - DISK_NORMAL * disk_distance;
+        float disk_distance_to_point = point_on_disk_plane.length();
+        std::cout << y_axis_2d_plane << std::endl;
+        if (disk_distance  * disk_distance_prev <= 0){
+            std::cout << y_pos - b_impact_param_3d << std::endl;
+            std::cin.get();
+            // std::cout << disk_distance_to_point << std::endl;
+            // std::cin.get();
+            if (!result.hitDisk && disk_distance_to_point < DISK_OUTER_RADIUS && disk_distance_to_point > DISK_INNER_RADIUS) {
+                float disk_brightness_factor = getDiskProceduralColorFactor(current_pos_3d, BH_POSITION);
+                result.hitDisk = true;
+                result.accumulatedColor += DISK_BASE_COLOR * disk_distance_to_point /30.0f;
+                // std::cout << "hit disk" << std::endl;
+                // std::cout << disk_brightness_factor << std::endl;
+                //std::cout << "hit disk" << std::endl;
+            }
+        }
+        else{
+            result.hitDisk = false;
+        }
+
 
         // dp_x/ds = -n^2 * rs * x / r^3
         // dp_y/ds = -n^2 * rs * y / r^3
@@ -312,6 +398,9 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
         
         x_pos += dx;
         y_pos += dy;
+
+
+        
 
         // Early exit optimization
         if (i > NUM_INTEGRATION_STEPS / 2) { // Check only in the latter half of integration
@@ -402,27 +491,45 @@ std::vector<unsigned char> renderPerspective(
             RayTraceResult traceResult = traceRayNearBlackHole(camera.position, initialRayDirection);
 
             int idx = (j * outputWidth + i) * 3;
-            if (traceResult.hitEventHorizon) {
-                outputImage[idx + 0] = 0; // R = Black
-                outputImage[idx + 1] = 0; // G = Black
-                outputImage[idx + 2] = 0; // B = Black
-            } else {
-                std::vector<unsigned char> pixelColor = getPixelFromDirection(
-                    backgroundData, backgroundWidth, backgroundHeight,
-                    traceResult.finalDir // Use the deflected direction
-                );
+            Vec3f finalCombinedColorVec(0.0f, 0.0f, 0.0f);
 
-                if (!pixelColor.empty()) {
-                    outputImage[idx + 0] = pixelColor[0]; // R
-                    outputImage[idx + 1] = pixelColor[1]; // G
-                    outputImage[idx + 2] = pixelColor[2]; // B
-                } else {
-                    // Should not happen if getPixelFromDirection handles errors and returns black
-                    outputImage[idx + 0] = 255; // Magenta for error indication
-                    outputImage[idx + 1] = 0;
-                    outputImage[idx + 2] = 255;
+            // Option 1: If disk was hit during integration, accumulatedColor holds its value.
+            // Otherwise, get background color.
+            bool diskWasHitInTrace = (traceResult.accumulatedColor.length() > EPSILON_BH); // Check if color was actually added
+
+            if (diskWasHitInTrace) {
+                finalCombinedColorVec = traceResult.accumulatedColor;
+                // If you want to ADD background to disk emission:
+                if (!traceResult.hitEventHorizon) {
+                    std::vector<unsigned char> bgColorUChar = getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir);
+                    if (!bgColorUChar.empty()) {
+                        finalCombinedColorVec.x += static_cast<float>(bgColorUChar[0]) / 255.0f;
+                        finalCombinedColorVec.y += static_cast<float>(bgColorUChar[1]) / 255.0f;
+                        finalCombinedColorVec.z += static_cast<float>(bgColorUChar[2]) / 255.0f;
+                    }
+                }
+            } else {
+                // No disk hit during trace, so just get background color based on final (lensed) direction
+                if (!traceResult.hitEventHorizon) {
+                    std::vector<unsigned char> bgColorUChar = getPixelFromDirection(
+                        backgroundData, backgroundWidth, backgroundHeight,
+                        traceResult.finalDir
+                    );
+                    if (!bgColorUChar.empty()) {
+                        finalCombinedColorVec.x = static_cast<float>(bgColorUChar[0]) / 255.0f;
+                        finalCombinedColorVec.y = static_cast<float>(bgColorUChar[1]) / 255.0f;
+                        finalCombinedColorVec.z = static_cast<float>(bgColorUChar[2]) / 255.0f;
+                    } else {
+                            finalCombinedColorVec = Vec3f(1.0f, 0.0f, 1.0f); // Magenta for error background
+                    }
                 }
             }
+            
+
+            // Clamp final color and convert to uchar
+            outputImage[idx + 0] = static_cast<unsigned char>(std::min(1.0f, std::max(0.0f, finalCombinedColorVec.x)) * 255.0f);
+            outputImage[idx + 1] = static_cast<unsigned char>(std::min(1.0f, std::max(0.0f, finalCombinedColorVec.y)) * 255.0f);
+            outputImage[idx + 2] = static_cast<unsigned char>(std::min(1.0f, std::max(0.0f, finalCombinedColorVec.z)) * 255.0f);
         }
     }
     return outputImage;
@@ -466,10 +573,10 @@ int main() {
     std::cout << "Successfully read background BMP image with dimensions: " << bg_width << "x" << bg_height << std::endl;
 
     // Animation Parameters
-    const int num_frames = 120; // Number of frames for the animation (e.g., 5 seconds at 24 fps)
+    const int num_frames = 1; // Number of frames for the animation (e.g., 5 seconds at 24 fps)
     const float orbit_radius = 60.0f; // Radius of the camera's orbit around BH_POSITION
     // const float camera_z_offset = BH_POSITION.z + 20.0f; // Optional: elevate camera slightly
-    const float camera_z_offset = BH_POSITION.z; // Keep camera in the same z-plane as BH for simplicity
+    const float camera_z_offset = BH_POSITION.z + 10.0f; // Keep camera in the same z-plane as BH for simplicity
 
     // Camera parameters that change per frame are position and lookAt (always BH_POSITION)
     // worldUp and fovY can remain constant for this animation
