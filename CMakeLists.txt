@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CPU_DEMO_FILES
-        src/cpu_demo.cpp
+        src/gpu_demo.cpp
         src/file_io.cpp
 )
 
