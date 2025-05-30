@@ -11,9 +11,16 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CPU_DEMO_FILES
-        src/gpu_demo.cpp
+        src/cpu_demo.cpp
         src/file_io.cpp
 )
+set(GPU_DEMO_FILES
+        src/gpu_demo.cu
+        src/file_io.cpp
+        src/HostBuffer.cpp
+        src/CudaBuffer.cu
+)
 
+add_executable(gpu-demo ${GPU_DEMO_FILES})
 add_executable(cpu-demo ${CPU_DEMO_FILES})
 
