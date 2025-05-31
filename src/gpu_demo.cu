@@ -22,8 +22,19 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 #define BH_RSCHWARZSCHILD_RADIUS 2.0f
 #define EVENT_HORIZON_RADIUS 2.0f
 #define INTEGRATION_DISTANCE_MULTIPLIER 50.0f
-#define NUM_INTEGRATION_STEPS 200
+#define NUM_INTEGRATION_STEPS 2000
 #define EPSILON_BH 1e-4f
+
+// Accretion Disk Parameters
+#define DISK_NORMAL_X 0.0f
+#define DISK_NORMAL_Y 0.8f
+#define DISK_NORMAL_Z 0.6f
+#define DISK_INNER_RADIUS (EVENT_HORIZON_RADIUS * 3.0f)
+#define DISK_OUTER_RADIUS (EVENT_HORIZON_RADIUS * 15.0f)
+#define DISK_BASE_COLOR_R 1.0f
+#define DISK_BASE_COLOR_G 0.4f
+#define DISK_BASE_COLOR_B 0.1f
+#define DISK_MAX_BRIGHTNESS 2.0f
 
 // RayTraceResult for device
 
@@ -53,12 +64,39 @@ void getPixelFromDirection(const unsigned char* imageData, int imageWidth, int i
     rgb_out[2] = imageData[pixel_idx + 2];
 }
 
+// Device: get procedural color factor for accretion disk
+__device__ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane) {
+    float dx = point_on_disk_plane.x;
+    float dy = point_on_disk_plane.y;
+    float distance = sqrtf(dx*dx + dy*dy);
+
+    if (distance < DISK_INNER_RADIUS || distance > DISK_OUTER_RADIUS) {
+        return 0.0f;
+    }
+    if (distance < EPSILON_BH) distance = EPSILON_BH;
+
+    float theta = atan2f(dy, dx);
+    float r_tex_normalized = (4 * distance + sinf(distance) + 2*sinf(distance*2) + 3 * sinf(distance / 3.2)) / DISK_OUTER_RADIUS;
+
+    float radial_factor = 1.0f - ( (distance - DISK_INNER_RADIUS) / (DISK_OUTER_RADIUS - DISK_INNER_RADIUS) );
+    radial_factor = fmaxf(0.0f, fminf(1.0f, radial_factor));
+    
+    float angular_factor = 0.8f + 0.6f * sinf(6.0f * theta + 10.0f * r_tex_normalized * r_tex_normalized );
+
+    float brightness = DISK_MAX_BRIGHTNESS * radial_factor * angular_factor;
+    
+    return fmaxf(0.0f, fminf(DISK_MAX_BRIGHTNESS, brightness));
+}
+
 // Device: ray tracing near black hole
 __device__
 RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir) {
     RayTraceResult result;
     result.finalDir = rayDir;
     result.hitEventHorizon = false;
+    // Initialize hitDisk and accumulatedColor
+    result.hitDisk = false;
+    result.accumulatedColor = Vec3f(0.0f, 0.0f, 0.0f);
 
     Vec3f BH_POSITION(BH_POSITION_X, BH_POSITION_Y, BH_POSITION_Z);
 
@@ -68,25 +106,25 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     Vec3f b_vec_3d = P_ca - BH_POSITION;
     float b_impact_param_3d = b_vec_3d.length();
 
-    Vec3f O_minus_C = rayOrigin - BH_POSITION;
-    float a_quad = rayDir.dot(rayDir);
-    float b_quad = 2.0f * rayDir.dot(O_minus_C);
-    float c_quad = O_minus_C.dot(O_minus_C) - EVENT_HORIZON_RADIUS * EVENT_HORIZON_RADIUS;
-    float discriminant = b_quad * b_quad - 4.0f * a_quad * c_quad;
+    // Vec3f O_minus_C = rayOrigin - BH_POSITION;
+    // float a_quad = rayDir.dot(rayDir);
+    // float b_quad = 2.0f * rayDir.dot(O_minus_C);
+    // float c_quad = O_minus_C.dot(O_minus_C) - EVENT_HORIZON_RADIUS * EVENT_HORIZON_RADIUS;
+    // float discriminant = b_quad * b_quad - 4.0f * a_quad * c_quad;
 
-    if (discriminant >= 0.0f) {
-        float t0 = (-b_quad - sqrtf(discriminant)) / (2.0f * a_quad);
-        float t1 = (-b_quad + sqrtf(discriminant)) / (2.0f * a_quad);
-        if (t0 > 0 || t1 > 0) {
-            float t_intersect = (t0 > 0 && t1 > 0) ? fminf(t0, t1) : fmaxf(t0, t1);
-            if (t_intersect > 0) {
-                if (b_impact_param_3d < EVENT_HORIZON_RADIUS && t_ca > 0) {
-                    result.hitEventHorizon = true;
-                    return result;
-                }
-            }
-        }
-    }
+    // if (discriminant >= 0.0f) {
+    //     float t0 = (-b_quad - sqrtf(discriminant)) / (2.0f * a_quad);
+    //     float t1 = (-b_quad + sqrtf(discriminant)) / (2.0f * a_quad);
+    //     if (t0 > 0 || t1 > 0) {
+    //         float t_intersect = (t0 > 0 && t1 > 0) ? fminf(t0, t1) : fmaxf(t0, t1);
+    //         if (t_intersect > 0) {
+    //             if (b_impact_param_3d < EVENT_HORIZON_RADIUS && t_ca > 0) {
+    //                 result.hitEventHorizon = true;
+    //                 return result;
+    //             }
+    //         }
+    //     }
+    // }
 
     Vec3f y_axis_2d_plane;
     if (b_impact_param_3d < EPSILON_BH) {
@@ -123,6 +161,11 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     float py_val = n_init * 0.0f;
 
     float ds_step = (2.0f * s_max_integration_dist) / (float)NUM_INTEGRATION_STEPS;
+    // Initialize variables for disk intersection
+    float disk_distance = 0.0f;
+    float disk_distance_prev = 0.0f;
+    const Vec3f DISK_NORMAL_VEC(DISK_NORMAL_X, DISK_NORMAL_Y, DISK_NORMAL_Z);
+    const Vec3f DISK_BASE_COLOR_VEC(DISK_BASE_COLOR_R, DISK_BASE_COLOR_G, DISK_BASE_COLOR_B);
 
     for (int i = 0; i < NUM_INTEGRATION_STEPS; ++i) {
         float r_sq = x_pos * x_pos + y_pos * y_pos;
@@ -156,6 +199,51 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
 
         float dx = (px_val / n_current) * ds_step;
         float dy = (py_val / n_current) * ds_step;
+
+        // Calculate the point in 3D space (relative to BH for disk check)
+        // x_pos and y_pos are coordinates in the 2D plane defined by x_axis_2d_plane and y_axis_2d_plane,
+        // with the BH at the origin of this 2D system.
+        Vec3f current_pos_relative_to_BH = x_axis_2d_plane * x_pos + y_axis_2d_plane * y_pos;
+        Vec3f current_pos_world = BH_POSITION + current_pos_relative_to_BH;
+
+        disk_distance_prev = disk_distance; // Store previous distance for crossing check
+        disk_distance = (current_pos_world - BH_POSITION).dot(DISK_NORMAL_VEC);
+
+        // Check for disk intersection if ray crosses the disk plane (sign change in distance)
+        if (disk_distance * disk_distance_prev <= 0.0f && i > 0) { // i > 0 to ensure disk_distance_prev is initialized
+            // Point of intersection with the disk plane (approximately, can refine with line-plane intersection if needed)
+            // For simplicity, use current_pos_world, assuming ds_step is small enough.
+            Vec3f point_on_disk_plane_world = current_pos_world - DISK_NORMAL_VEC * disk_distance; // Project current_pos_world onto disk plane
+            
+            // Calculate distance from BH center to this point *in the disk plane*
+            float dist_to_bh_in_disk_plane = (point_on_disk_plane_world - BH_POSITION).length(); // This is not quite right for procedural color.
+                                                                                                // getDiskProceduralColorFactor expects a point *on* the disk relative to its center.
+                                                                                                // The point_on_disk_plane_world IS on the disk plane.
+                                                                                                // Its coordinates relative to BH_POSITION are what's needed.
+
+            if (dist_to_bh_in_disk_plane >= DISK_INNER_RADIUS && dist_to_bh_in_disk_plane <= DISK_OUTER_RADIUS) {
+                // Use current_pos_world as the point for color factor, assuming it's close enough to the actual intersection point
+                // The procedural color function in CPU demo used `current_pos_3d` (which is `current_pos_world` here)
+                // and `BH_POSITION` as `disk_center_on_plane`. This seems correct.
+                float disk_brightness_factor = getDiskProceduralColorFactor(Vec3f(dist_to_bh_in_disk_plane, dist_to_bh_in_disk_plane, 0.0f));
+                if (disk_brightness_factor > 0.0f) {
+                    result.hitDisk = true; // Mark that disk was hit at least once
+                    // Accumulate color. If ray passes through multiple times, this will add up.
+                    // Consider if only the first hit should count or if accumulation is desired.
+                    // CPU demo seems to just set hitDisk and adds to accumulatedColor once.
+                    // Let's stick to accumulating if it hits multiple times, can be adjusted.
+                    float tx = px_val / n_current;
+                    float ty = py_val / n_current;
+                    float t_len = sqrtf(tx * tx + ty * ty);
+                    float vx_norm = tx / t_len;
+                    float vy_norm = ty / t_len;
+                    Vec3f finalDir = (x_axis_2d_plane * vx_norm + y_axis_2d_plane * vy_norm).normalize();
+                    float dot_factor = finalDir.dot(DISK_NORMAL_VEC);
+                    result.accumulatedColor = result.accumulatedColor + DISK_BASE_COLOR_VEC * disk_brightness_factor * (1.0f / (fabsf(dot_factor) + EPSILON_BH));
+                }
+            }
+        }
+
 
         px_val += dp_x;
         py_val += dp_y;
@@ -236,17 +324,35 @@ void renderPerspectiveKernel(
     RayTraceResult traceResult = traceRayNearBlackHole(camera.position, initialRayDirection);
 
     int pix_idx = (j * outputWidth + i) * 3;
-    if (traceResult.hitEventHorizon) {
-        outputImage[pix_idx + 0] = 0;
-        outputImage[pix_idx + 1] = 0;
-        outputImage[pix_idx + 2] = 0;
-    } else {
-        unsigned char rgb[3];
-        getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir, rgb);
-        outputImage[pix_idx + 0] = rgb[0];
-        outputImage[pix_idx + 1] = rgb[1];
-        outputImage[pix_idx + 2] = rgb[2];
+    Vec3f finalColor(0.0f, 0.0f, 0.0f); // Initialize to black, as per CPU logic
+
+    if (traceResult.hitDisk) {
+        finalColor = traceResult.accumulatedColor; // Start with disk color
+        // If disk is hit AND ray does NOT fall into event horizon, add background
+        if (!traceResult.hitEventHorizon) { 
+            unsigned char bgRgb[3];
+            getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir, bgRgb);
+            finalColor.x += static_cast<float>(bgRgb[0]) / 255.0f;
+            finalColor.y += static_cast<float>(bgRgb[1]) / 255.0f;
+            finalColor.z += static_cast<float>(bgRgb[2]) / 255.0f;
+        }
+        // If disk is hit AND ray hits event horizon, finalColor remains the accumulatedColor from the disk (emission before falling in).
+    } else { // Disk was NOT hit
+        // If disk not hit AND ray does NOT fall into event horizon, use background
+        if (!traceResult.hitEventHorizon) { 
+            unsigned char rgb[3];
+            getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir, rgb);
+            finalColor.x = static_cast<float>(rgb[0]) / 255.0f;
+            finalColor.y = static_cast<float>(rgb[1]) / 255.0f;
+            finalColor.z = static_cast<float>(rgb[2]) / 255.0f;
+        }
+        // If disk not hit AND ray hits event horizon, finalColor remains (0.0f, 0.0f, 0.0f) -> black from initialization.
     }
+
+    // Clamp and set output color
+    outputImage[pix_idx + 0] = static_cast<unsigned char>(clampf(finalColor.x, 0.0f, 1.0f) * 255.0f);
+    outputImage[pix_idx + 1] = static_cast<unsigned char>(clampf(finalColor.y, 0.0f, 1.0f) * 255.0f);
+    outputImage[pix_idx + 2] = static_cast<unsigned char>(clampf(finalColor.z, 0.0f, 1.0f) * 255.0f);
 }
 
 // Host: kernel launcher
@@ -298,14 +404,14 @@ int main() {
     std::cout << "Successfully read background BMP image with dimensions: " << bg_width << "x" << bg_height << std::endl;
 
     // Animation Parameters
-    const int num_frames = 120;
+    const int num_frames = 200;
     const float orbit_radius = 60.0f;
     const float camera_z_offset = 0.0f;
 
     Vec3f worldUpVector(0.0f, 0.0f, 1.0f);
     float fieldOfViewY = 75.0f;
-    int outputWidth = 720;
-    int outputHeight = 480;
+    int outputWidth = 1920;
+    int outputHeight = 1080;
 
     char filename_buffer[256];
 
@@ -329,9 +435,9 @@ int main() {
         float angle = PI/2 + PI * static_cast<float>(frame) / static_cast<float>(num_frames);
 
         Vec3f cameraPosition(
-            BH_POSITION_X + orbit_radius * std::cos(angle),
+            BH_POSITION_X + orbit_radius * std::cos(angle) + 20,
             BH_POSITION_Y + orbit_radius * std::sin(angle),
-            camera_z_offset
+            camera_z_offset + 10.0f
         );
         Vec3f lookAtTarget(BH_POSITION_X, BH_POSITION_Y, BH_POSITION_Z);
 

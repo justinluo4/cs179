@@ -57,10 +57,10 @@ RM = /usr/local/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/sadeshmu/cs179
+CMAKE_SOURCE_DIR = /home/jluo2/cs179
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/sadeshmu/cs179/build
+CMAKE_BINARY_DIR = /home/jluo2/cs179/build
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/sadeshmu/cs179/build/CMakeFiles /home/sadeshmu/cs179/build//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jluo2/cs179/build/CMakeFiles /home/jluo2/cs179/build//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/sadeshmu/cs179/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jluo2/cs179/build/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -117,6 +117,19 @@ depend:
 .PHONY : depend
 
 #=============================================================================
+# Target rules for targets named gpu-demo
+
+# Build rule for target.
+gpu-demo: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 gpu-demo
+.PHONY : gpu-demo
+
+# fast build rule for target.
+gpu-demo/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/build
+.PHONY : gpu-demo/fast
+
+#=============================================================================
 # Target rules for targets named cpu-demo
 
 # Build rule for target.
@@ -128,6 +141,54 @@ cpu-demo: cmake_check_build_system
 cpu-demo/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/build
 .PHONY : cpu-demo/fast
+
+src/CudaBuffer.o: src/CudaBuffer.cu.o
+.PHONY : src/CudaBuffer.o
+
+# target to build an object file
+src/CudaBuffer.cu.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o
+.PHONY : src/CudaBuffer.cu.o
+
+src/CudaBuffer.i: src/CudaBuffer.cu.i
+.PHONY : src/CudaBuffer.i
+
+# target to preprocess a source file
+src/CudaBuffer.cu.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.i
+.PHONY : src/CudaBuffer.cu.i
+
+src/CudaBuffer.s: src/CudaBuffer.cu.s
+.PHONY : src/CudaBuffer.s
+
+# target to generate assembly for a file
+src/CudaBuffer.cu.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.s
+.PHONY : src/CudaBuffer.cu.s
+
+src/HostBuffer.o: src/HostBuffer.cpp.o
+.PHONY : src/HostBuffer.o
+
+# target to build an object file
+src/HostBuffer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o
+.PHONY : src/HostBuffer.cpp.o
+
+src/HostBuffer.i: src/HostBuffer.cpp.i
+.PHONY : src/HostBuffer.i
+
+# target to preprocess a source file
+src/HostBuffer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.i
+.PHONY : src/HostBuffer.cpp.i
+
+src/HostBuffer.s: src/HostBuffer.cpp.s
+.PHONY : src/HostBuffer.s
+
+# target to generate assembly for a file
+src/HostBuffer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.s
+.PHONY : src/HostBuffer.cpp.s
 
 src/cpu_demo.o: src/cpu_demo.cpp.o
 .PHONY : src/cpu_demo.o
@@ -158,6 +219,7 @@ src/file_io.o: src/file_io.cpp.o
 
 # target to build an object file
 src/file_io.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/file_io.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/src/file_io.cpp.o
 .PHONY : src/file_io.cpp.o
 
@@ -166,6 +228,7 @@ src/file_io.i: src/file_io.cpp.i
 
 # target to preprocess a source file
 src/file_io.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/file_io.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/src/file_io.cpp.i
 .PHONY : src/file_io.cpp.i
 
@@ -174,8 +237,33 @@ src/file_io.s: src/file_io.cpp.s
 
 # target to generate assembly for a file
 src/file_io.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/file_io.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/src/file_io.cpp.s
 .PHONY : src/file_io.cpp.s
+
+src/gpu_demo.o: src/gpu_demo.cu.o
+.PHONY : src/gpu_demo.o
+
+# target to build an object file
+src/gpu_demo.cu.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o
+.PHONY : src/gpu_demo.cu.o
+
+src/gpu_demo.i: src/gpu_demo.cu.i
+.PHONY : src/gpu_demo.i
+
+# target to preprocess a source file
+src/gpu_demo.cu.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.i
+.PHONY : src/gpu_demo.cu.i
+
+src/gpu_demo.s: src/gpu_demo.cu.s
+.PHONY : src/gpu_demo.s
+
+# target to generate assembly for a file
+src/gpu_demo.cu.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.s
+.PHONY : src/gpu_demo.cu.s
 
 # Help Target
 help:
@@ -186,12 +274,22 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... cpu-demo"
+	@echo "... gpu-demo"
+	@echo "... src/CudaBuffer.o"
+	@echo "... src/CudaBuffer.i"
+	@echo "... src/CudaBuffer.s"
+	@echo "... src/HostBuffer.o"
+	@echo "... src/HostBuffer.i"
+	@echo "... src/HostBuffer.s"
 	@echo "... src/cpu_demo.o"
 	@echo "... src/cpu_demo.i"
 	@echo "... src/cpu_demo.s"
 	@echo "... src/file_io.o"
 	@echo "... src/file_io.i"
 	@echo "... src/file_io.s"
+	@echo "... src/gpu_demo.o"
+	@echo "... src/gpu_demo.i"
+	@echo "... src/gpu_demo.s"
 .PHONY : help
 
 

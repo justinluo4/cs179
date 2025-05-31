@@ -79,8 +79,8 @@ const float EPSILON_BH = 1e-4f;                   // Small number to avoid divis
 const Vec3f DISK_NORMAL(0.0f, 0.0f, 1.0f);     // Disk lies in XY plane (normal along Z), centered at BH_POSITION
 const float DISK_INNER_RADIUS = EVENT_HORIZON_RADIUS * 3.0f;  // e.g., ISCO for Schwarzschild BH is 3*rs = 6GM/c^2
 const float DISK_OUTER_RADIUS = EVENT_HORIZON_RADIUS * 15.0f; // Outer extent of the disk
-const Vec3f DISK_BASE_COLOR(1.0f, 1.0f, 1.0f);   // Base color is white
-const float DISK_MAX_BRIGHTNESS = 0.7f;         // Max brightness multiplier from procedural texture for the white color
+const Vec3f DISK_BASE_COLOR(1.0f, 0.4f, 0.0f);   // Base color is white
+const float DISK_MAX_BRIGHTNESS = 4.0f;         // Max brightness multiplier from procedural texture for the white color
 
 
 
@@ -189,7 +189,7 @@ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane, const Vec3f
     float radial_factor = 1.0f - ( (distance - DISK_INNER_RADIUS) / (DISK_OUTER_RADIUS - DISK_INNER_RADIUS) ); // 1 at inner, 0 at outer
     radial_factor = std::max(0.0f, std::min(1.0f, radial_factor)); // clamp [0,1]
     
-    float angular_factor = 0.8f + 0.2f * std::sin(6.0f * theta + 10.0f * r_tex_normalized * r_tex_normalized ); // Modulates between 0.6 and 1.0
+    float angular_factor = 0.8f + 0.5f * std::sin(6.0f * theta + 10.0f * r_tex_normalized * r_tex_normalized ); // Modulates between 0.6 and 1.0
 
     float brightness = DISK_MAX_BRIGHTNESS * radial_factor * angular_factor;
     
@@ -256,7 +256,6 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     //         }
     //     }
     // }
-    
     // Define the 2D integration plane.
     // The "x" axis of this 2D plane will be aligned with the original rayDir.
     // The "y" axis of this 2D plane will be in the direction of the 3D impact parameter.
@@ -293,14 +292,8 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     // The z-axis of this 2D integration plane (normal to the plane) -- not strictly needed for 2D var updates
     // Vec3f z_axis_2d_plane = x_axis_2d_plane.cross(y_axis_2d_plane).normalize();
 
-    float s_max_integration_dist = INTEGRATION_DISTANCE_MULTIPLIER * BH_RSCHWARZSCHILD_RADIUS;
-    if (s_max_integration_dist < b_impact_param_3d * 2.5f) { // Ensure integration starts/ends far enough if impact param is large
-        s_max_integration_dist = b_impact_param_3d * 2.5f;
-    }
-    if (s_max_integration_dist < 20.0f * BH_RSCHWARZSCHILD_RADIUS) { // Minimum integration distance, esp. if EH is large or b is small
-        s_max_integration_dist = 20.0f * BH_RSCHWARZSCHILD_RADIUS;
-    }
-    if (s_max_integration_dist <= 0.0f) s_max_integration_dist = 10.0f; // Fallback if rs is zero or very small
+    float s_max_integration_dist = t_ca;
+
 
     // Initial 2D state variables for the ODEs:
     float x_pos = -s_max_integration_dist;    // Ray starts far to the "left" of BH (BH at origin of this 2D system)
@@ -321,7 +314,7 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     float px_val = n_init * 1.0f; // Initial direction (1,0) in 2D plane, so p_x = n*1
     float py_val = n_init * 0.0f; // p_y = n*0
 
-    float ds_step = (2.0f * s_max_integration_dist) / static_cast<float>(NUM_INTEGRATION_STEPS);
+    float ds_step = (3.5f * s_max_integration_dist) / static_cast<float>(NUM_INTEGRATION_STEPS);
     float disk_distance = 0.0f;
     float disk_distance_prev = 0.0f;
     for (int i = 0; i < NUM_INTEGRATION_STEPS; ++i) {
@@ -360,16 +353,16 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
         disk_distance = b_to_current.dot(DISK_NORMAL);
         Vec3f point_on_disk_plane = b_to_current - DISK_NORMAL * disk_distance;
         float disk_distance_to_point = point_on_disk_plane.length();
-        std::cout << y_axis_2d_plane << std::endl;
+        //std::cout << y_axis_2d_plane << std::endl;
         if (disk_distance  * disk_distance_prev <= 0){
-            std::cout << y_pos - b_impact_param_3d << std::endl;
-            std::cin.get();
+            //std::cout << y_pos - b_impact_param_3d << std::endl;
+            //std::cin.get();
             // std::cout << disk_distance_to_point << std::endl;
             // std::cin.get();
             if (!result.hitDisk && disk_distance_to_point < DISK_OUTER_RADIUS && disk_distance_to_point > DISK_INNER_RADIUS) {
                 float disk_brightness_factor = getDiskProceduralColorFactor(current_pos_3d, BH_POSITION);
                 result.hitDisk = true;
-                result.accumulatedColor += DISK_BASE_COLOR * disk_distance_to_point /30.0f;
+                result.accumulatedColor += DISK_BASE_COLOR * disk_brightness_factor;
                 // std::cout << "hit disk" << std::endl;
                 // std::cout << disk_brightness_factor << std::endl;
                 //std::cout << "hit disk" << std::endl;

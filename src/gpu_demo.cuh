@@ -30,7 +30,9 @@ struct Vec3f {
 struct RayTraceResult {
     Vec3f finalDir;
     bool hitEventHorizon;
-    __host__ __device__ RayTraceResult() : finalDir(0,0,0), hitEventHorizon(false) {}
+    Vec3f accumulatedColor; // Accumulated color of the ray
+    bool hitDisk; // True if the ray entered the accretion disk
+    __host__ __device__ RayTraceResult() : finalDir(0,0,0), hitEventHorizon(false), accumulatedColor(0,0,0), hitDisk(false) {}
 };
 
 struct Camera {
@@ -43,14 +45,14 @@ struct Camera {
         : position(pos), lookAt(target), worldUp(up), fovY_degrees(fov) {}
 };
 
-// Constants (declare as extern, define in .cu)
-extern __constant__ Vec3f BH_POSITION;
-extern __constant__ float BH_RSCHWARZSCHILD_RADIUS;
-extern __constant__ float EVENT_HORIZON_RADIUS;
-extern __constant__ float INTEGRATION_DISTANCE_MULTIPLIER;
-extern __constant__ int NUM_INTEGRATION_STEPS;
-extern __constant__ float EPSILON_BH;
-extern __constant__ float PI;
+// Constants previously declared here are now handled by #defines in gpu_demo.cu
+// extern __constant__ Vec3f BH_POSITION; // Removed
+// extern __constant__ float BH_RSCHWARZSCHILD_RADIUS; // Removed
+// extern __constant__ float EVENT_HORIZON_RADIUS; // Removed
+// extern __constant__ float INTEGRATION_DISTANCE_MULTIPLIER; // Removed
+// extern __constant__ int NUM_INTEGRATION_STEPS; // Removed
+// extern __constant__ float EPSILON_BH; // Removed
+// extern __constant__ float PI; // Removed
 
 // Device function helpers declarations
 __device__ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir);
