@@ -71,4 +71,26 @@ void launchRenderPerspective(const Camera& camera, const unsigned char* backgrou
                 int backgroundHeight, unsigned char* outputImage, int outputWidth, int outputHeight
 );
 
+// Bloom effect kernels and launcher
+__global__ void extractBrightPassKernel(const unsigned char* inputImage, unsigned char* brightPassImage, 
+                                    int width, int height, float threshold);
+
+__global__ void gaussianBlurKernel(const unsigned char* inputImage, unsigned char* outputImage, 
+                                 int width, int height, bool horizontalPass, 
+                                 const float* blurKernel_d, int blurRadius);
+
+__global__ void additiveBlendKernel(const unsigned char* originalImage, const unsigned char* bloomImage, 
+                                unsigned char* outputImage, int width, int height, float bloomIntensity);
+
+void launchBloomEffect(unsigned char* d_renderedImage, 
+                       unsigned char* d_brightPassImage, 
+                       unsigned char* d_tempBlurImage, 
+                       unsigned char* d_finalBlurredImage, 
+                       unsigned char* d_finalOutputImage, // This will be the image with bloom + original
+                       int width, int height, 
+                       float brightnessThreshold, 
+                       int blurRadius, 
+                       const float* d_blurKernel, 
+                       float bloomIntensity);
+
 #endif 
