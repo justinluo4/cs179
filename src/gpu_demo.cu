@@ -297,7 +297,7 @@ void renderPerspectiveKernel(
     const unsigned char* backgroundData,
     int backgroundWidth,
     int backgroundHeight,
-    unsigned char* outputImage,
+    unsigned char* outputBackground, unsigned char* outputForeground,
     int outputWidth,
     int outputHeight
 ) {
@@ -325,35 +325,46 @@ void renderPerspectiveKernel(
     RayTraceResult traceResult = traceRayNearBlackHole(camera.position, initialRayDirection);
 
     int pix_idx = (j * outputWidth + i) * 3;
-    Vec3f finalColor(0.0f, 0.0f, 0.0f); // Initialize to black, as per CPU logic
+    Vec3f finalColorBack(0.0f, 0.0f, 0.0f); // Initialize to black, as per CPU logic
+    Vec3f finalColorFore(0.0f, 0.0f, 0.0f);
 
     if (traceResult.hitDisk) {
-        finalColor = traceResult.accumulatedColor; // Start with disk color
-        // If disk is hit AND ray does NOT fall into event horizon, add background
-        if (!traceResult.hitEventHorizon) { 
-            unsigned char bgRgb[3];
-            getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir, bgRgb);
-            finalColor.x += static_cast<float>(bgRgb[0]) / 255.0f;
-            finalColor.y += static_cast<float>(bgRgb[1]) / 255.0f;
-            finalColor.z += static_cast<float>(bgRgb[2]) / 255.0f;
-        }
-        // If disk is hit AND ray hits event horizon, finalColor remains the accumulatedColor from the disk (emission before falling in).
-    } else { // Disk was NOT hit
-        // If disk not hit AND ray does NOT fall into event horizon, use background
-        if (!traceResult.hitEventHorizon) { 
+        // Case 1: Disk was hit — foreground only
+        finalColorFore = traceResult.accumulatedColor;
+            if (!traceResult.hitEventHorizon) { 
+                unsigned char bgRgb[3];
+                getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir, bgRgb);
+                finalColorFore.x += static_cast<float>(bgRgb[0]) / 255.0f;
+                finalColorFore.y += static_cast<float>(bgRgb[1]) / 255.0f;
+                finalColorFore.z += static_cast<float>(bgRgb[2]) / 255.0f;
+
+                finalColorBack.x += static_cast<float>(bgRgb[0]) / 255.0f;
+                finalColorBack.y += static_cast<float>(bgRgb[1]) / 255.0f;
+                finalColorBack.z += static_cast<float>(bgRgb[2]) / 255.0f;
+            }
+        // finalColorBack = Vec3f(0.0f, 0.0f, 0.0f); // mask background
+    } else {
+        if (!traceResult.hitEventHorizon) {
+            // Case 2: No disk, ray escaped — show lensed background
             unsigned char rgb[3];
             getPixelFromDirection(backgroundData, backgroundWidth, backgroundHeight, traceResult.finalDir, rgb);
-            finalColor.x = static_cast<float>(rgb[0]) / 255.0f;
-            finalColor.y = static_cast<float>(rgb[1]) / 255.0f;
-            finalColor.z = static_cast<float>(rgb[2]) / 255.0f;
-        }
-        // If disk not hit AND ray hits event horizon, finalColor remains (0.0f, 0.0f, 0.0f) -> black from initialization.
+            finalColorBack.x = static_cast<float>(rgb[0]) / 255.0f;
+            finalColorBack.y = static_cast<float>(rgb[1]) / 255.0f;
+            finalColorBack.z = static_cast<float>(rgb[2]) / 255.0f;
+            finalColorFore = Vec3f(0.0f, 0.0f, 0.0f);
+        } 
+
     }
 
+
     // Clamp and set output color
-    outputImage[pix_idx + 0] = static_cast<unsigned char>(clampf(finalColor.x, 0.0f, 1.0f) * 255.0f);
-    outputImage[pix_idx + 1] = static_cast<unsigned char>(clampf(finalColor.y, 0.0f, 1.0f) * 255.0f);
-    outputImage[pix_idx + 2] = static_cast<unsigned char>(clampf(finalColor.z, 0.0f, 1.0f) * 255.0f);
+    outputBackground[pix_idx + 0] = static_cast<unsigned char>(clampf(finalColorBack.x, 0.0f, 1.0f) * 255.0f);
+    outputBackground[pix_idx + 1] = static_cast<unsigned char>(clampf(finalColorBack.y, 0.0f, 1.0f) * 255.0f);
+    outputBackground[pix_idx + 2] = static_cast<unsigned char>(clampf(finalColorBack.z, 0.0f, 1.0f) * 255.0f);
+
+    outputForeground[pix_idx + 0] = static_cast<unsigned char>(clampf(finalColorFore.x, 0.0f, 1.0f) * 255.0f);
+    outputForeground[pix_idx + 1] = static_cast<unsigned char>(clampf(finalColorFore.y, 0.0f, 1.0f) * 255.0f);
+    outputForeground[pix_idx + 2] = static_cast<unsigned char>(clampf(finalColorFore.z, 0.0f, 1.0f) * 255.0f);
 }
 
 // Host: kernel launcher
@@ -362,7 +373,7 @@ void launchRenderPerspective(
     const unsigned char* d_backgroundData,
     int backgroundWidth,
     int backgroundHeight,
-    unsigned char* d_outputImage,
+    unsigned char* d_outputImageBack, unsigned char* d_outputImageFore, 
     int outputWidth,
     int outputHeight
 ) {
@@ -375,180 +386,140 @@ void launchRenderPerspective(
         d_backgroundData,
         backgroundWidth,
         backgroundHeight,
-        d_outputImage,
+        d_outputImageBack,
+        d_outputImageFore,
         outputWidth,
         outputHeight
+    );
+
+    cudaDeviceSynchronize();
+}
+
+// Kernel for adding fore and back 
+__global__
+void addOutputsKernel(unsigned char* outputImage, unsigned char* outputBackground, unsigned char *outputForeground, 
+                    int outputWidth, int outputHeight) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalPixels = outputWidth * outputHeight;
+    if (idx >= totalPixels) return;
+
+    int i = idx % outputWidth;
+    int j = idx / outputWidth;
+    int pix_idx = (j * outputWidth + i) * 3;
+
+    float val0 = (float)outputBackground[pix_idx + 0] + (float)outputForeground[pix_idx + 0];
+    float val1 = (float)outputBackground[pix_idx + 1] + (float)outputForeground[pix_idx + 1];
+    float val2 = (float)outputBackground[pix_idx + 2] + (float)outputForeground[pix_idx + 2];
+
+    outputImage[pix_idx + 0] = static_cast<unsigned char>(clampf(val0, 0.0f, 255.0f));
+    outputImage[pix_idx + 1] = static_cast<unsigned char>(clampf(val1, 0.0f, 255.0f));
+    outputImage[pix_idx + 2] = static_cast<unsigned char>(clampf(val2, 0.0f, 255.0f));
+
+}
+
+void launchAddOutputsKernel(unsigned char* outputImage, unsigned char* outputBackground, unsigned char *outputForeground, 
+                    int outputWidth, int outputHeight) {
+    
+    int totalPixels = outputWidth * outputHeight;
+    int threadsPerBlock = 256;
+    int numBlocks = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
+
+    addOutputsKernel<<<numBlocks, threadsPerBlock>>>(
+        outputImage, outputBackground, outputForeground,
+        outputWidth, outputHeight
     );
     cudaDeviceSynchronize();
 }
 
-// Bloom Effect Kernels
+// Bloom stuff 
+__global__
+void computeBloomWeights(const unsigned char* foreground, float* weights, int width, int height) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalPixels = width * height;
+    if (idx >= totalPixels) return;
 
-__global__ void extractBrightPassKernel(const unsigned char* inputImage, unsigned char* brightPassImage, 
-                                    int width, int height, float threshold) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int pix_idx = idx * 3;
 
-    if (x < width && y < height) {
-        int idx = (y * width + x) * 3;
-        float r = static_cast<float>(inputImage[idx + 0]) / 255.0f;
-        float g = static_cast<float>(inputImage[idx + 1]) / 255.0f;
-        float b = static_cast<float>(inputImage[idx + 2]) / 255.0f;
+    float r = (float)foreground[pix_idx + 0] / 255.0f; 
+    float g = (float)foreground[pix_idx + 1] / 255.0f; 
+    float b = (float)foreground[pix_idx + 2] / 255.0f; 
 
-        // Calculate brightness (e.g., luminance or max component)
-        // Using a common luminance approximation
-        float brightness = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-        // Alternative: float brightness = fmaxf(r, fmaxf(g, b));
-
-        if (brightness > threshold) {
-            brightPassImage[idx + 0] = inputImage[idx + 0];
-            brightPassImage[idx + 1] = inputImage[idx + 1];
-            brightPassImage[idx + 2] = inputImage[idx + 2];
-        } else {
-            brightPassImage[idx + 0] = 0;
-            brightPassImage[idx + 1] = 0;
-            brightPassImage[idx + 2] = 0;
-        }
-    }
+    // float intensity = sqrtf(r*r + g*g + b*b); // or use 0.2126*r + 0.7152*g + 0.0722*b for perceptual
+    float intensity = 0.2126*r + 0.7152*g + 0.0722*b;
+    weights[idx] = intensity;
 }
 
-#define BLUR_BLOCK_DIM_X 16
-#define BLUR_BLOCK_DIM_Y 16
+void launchComputeBloomWeightsKernel(const unsigned char* foreground, float* weights, int width, int height) {
+    int totalPixels = width * height;
+    int threadsPerBlock = 256;
+    int numBlocks = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
+    computeBloomWeights<<<numBlocks, threadsPerBlock>>>(foreground, weights, width, height);
+    cudaDeviceSynchronize();
+}
 
-__global__ void gaussianBlurKernel(const unsigned char* inputImage, unsigned char* outputImage, 
-                                 int width, int height, bool horizontalPass, 
-                                 const float* blurKernel_d, int blurRadius) {
-    // blurKernel_d is the 1D Gaussian kernel (weights)
-    // blurRadius is half the kernel width (e.g., for a 5x1 kernel, radius is 2)
+__global__
+void applyBloomBlurKernel(
+    const unsigned char* input,  // Foreground image
+    const float* weights,        // Per-pixel intensity weights
+    unsigned char* output,       // Blurred output
+    int width,
+    int height,
+    float bloom_strength
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalPixels = width * height;
+    if (idx >= totalPixels) return;
 
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int x = idx % width;
+    int y = idx / width;
 
-    if (x >= width || y >= height) return;
+    const int radius = 5; // 5x5 box blur
 
-    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
-    float weightSum = 0.0f;
+    float sumr = 0.0f, sumg = 0.0f, sumb = 0.0f;
+    int count = 0;
 
-    if (horizontalPass) {
-        for (int k = -blurRadius; k <= blurRadius; ++k) {
-            int ix = x + k;
-            if (ix >= 0 && ix < width) {
-                int offset = (y * width + ix) * 3;
-                float weight = blurKernel_d[k + blurRadius];
-                sumR += static_cast<float>(inputImage[offset + 0]) * weight;
-                sumG += static_cast<float>(inputImage[offset + 1]) * weight;
-                sumB += static_cast<float>(inputImage[offset + 2]) * weight;
-                weightSum += weight;
-            }
-        }
-    } else { // Vertical pass
-        for (int k = -blurRadius; k <= blurRadius; ++k) {
-            int iy = y + k;
-            if (iy >= 0 && iy < height) {
-                int offset = (iy * width + x) * 3;
-                float weight = blurKernel_d[k + blurRadius];
-                sumR += static_cast<float>(inputImage[offset + 0]) * weight;
-                sumG += static_cast<float>(inputImage[offset + 1]) * weight;
-                sumB += static_cast<float>(inputImage[offset + 2]) * weight;
-                weightSum += weight;
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            int nx = x + dx;
+            int ny = y + dy;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                int nidx = (ny * width + nx) * 3;
+                sumr += (float)input[nidx + 0];
+                sumg += (float)input[nidx + 1];
+                sumb += (float)input[nidx + 2];
+                count++;
             }
         }
     }
 
-    int outIdx = (y * width + x) * 3;
-    if (weightSum > 0) { // Avoid division by zero if all neighbors were out of bounds
-        outputImage[outIdx + 0] = static_cast<unsigned char>(clampf(sumR / weightSum, 0.0f, 255.0f));
-        outputImage[outIdx + 1] = static_cast<unsigned char>(clampf(sumG / weightSum, 0.0f, 255.0f));
-        outputImage[outIdx + 2] = static_cast<unsigned char>(clampf(sumB / weightSum, 0.0f, 255.0f));
-    } else {
-        outputImage[outIdx + 0] = inputImage[(y * width + x) * 3 + 0];
-        outputImage[outIdx + 1] = inputImage[(y * width + x) * 3 + 1];
-        outputImage[outIdx + 2] = inputImage[(y * width + x) * 3 + 2];
-    }
+    float avg_r = sumr / (float)count;
+    float avg_g = sumg / (float)count;
+    float avg_b = sumb / (float)count;
+
+    float scale = (weights[idx] > 0.6f) ? weights[idx] : 0.0f;
+    scale = clampf(scale, 0.0f, 1.0f);  // Optional clamp for safety
+
+    int out_idx = idx * 3;
+    float orig_r = (float)input[out_idx + 0];
+    float orig_g = (float)input[out_idx + 1];
+    float orig_b = (float)input[out_idx + 2];
+
+    output[out_idx + 0] = static_cast<unsigned char>(clampf(orig_r + avg_r * scale * bloom_strength, 0.0f, 255.0f));
+    output[out_idx + 1] = static_cast<unsigned char>(clampf(orig_g + avg_g * scale * bloom_strength, 0.0f, 255.0f));
+    output[out_idx + 2] = static_cast<unsigned char>(clampf(orig_b + avg_b * scale * bloom_strength, 0.0f, 255.0f));
+
+
 }
 
-__global__ void additiveBlendKernel(const unsigned char* originalImage, const unsigned char* bloomImage, 
-                                unsigned char* outputImage, int width, int height, float bloomIntensity) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+void launchBloomKernel(const unsigned char* input, const float* weights, unsigned char* output, int width, int height, float bloom_strength) {
+    int totalPixels = width * height;
+    int threadsPerBlock = 256;
+    int numBlocks = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
 
-    if (x < width && y < height) {
-        int idx = (y * width + x) * 3;
-        
-        float originalR = static_cast<float>(originalImage[idx + 0]);
-        float originalG = static_cast<float>(originalImage[idx + 1]);
-        float originalB = static_cast<float>(originalImage[idx + 2]);
-
-        float bloomR = static_cast<float>(bloomImage[idx + 0]) * bloomIntensity;
-        float bloomG = static_cast<float>(bloomImage[idx + 1]) * bloomIntensity;
-        float bloomB = static_cast<float>(bloomImage[idx + 2]) * bloomIntensity;
-
-        outputImage[idx + 0] = static_cast<unsigned char>(clampf(originalR + bloomR, 0.0f, 255.0f));
-        outputImage[idx + 1] = static_cast<unsigned char>(clampf(originalG + bloomG, 0.0f, 255.0f));
-        outputImage[idx + 2] = static_cast<unsigned char>(clampf(originalB + bloomB, 0.0f, 255.0f));
-    }
-}
-
-// Host launcher for bloom effect
-void launchBloomEffect(unsigned char* d_renderedImage,      // Input: original rendered image
-                       unsigned char* d_brightPassImage,    // Buffer for bright pass result
-                       unsigned char* d_tempBlurImage,      // Buffer for first blur pass (e.g., horizontal)
-                       unsigned char* d_finalBlurredImage,  // Buffer for second blur pass (e.g., vertical)
-                       unsigned char* d_finalOutputImage,   // Output: original + bloom
-                       int width, int height, 
-                       float brightnessThreshold, 
-                       int blurRadius,              // Half-width of the blur kernel
-                       const float* d_blurKernel,   // Pre-allocated and copied Gaussian kernel on device
-                       float bloomIntensity) {
-
-    dim3 threadsPerBlock(BLUR_BLOCK_DIM_X, BLUR_BLOCK_DIM_Y);
-    dim3 numBlocks((width + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                   (height + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
-    // 1. Extract bright pass
-    extractBrightPassKernel<<<numBlocks, threadsPerBlock>>>(d_renderedImage, d_brightPassImage, width, height, brightnessThreshold);
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) printf("CUDA error after extractBrightPassKernel: %s\n", cudaGetErrorString(err));
-    cudaDeviceSynchronize(); // Ensure completion before next step
-
-    // 2. Gaussian Blur - Horizontal pass
-    // Input: d_brightPassImage, Output: d_tempBlurImage
-    gaussianBlurKernel<<<numBlocks, threadsPerBlock>>>(d_brightPassImage, d_tempBlurImage, width, height, true, d_blurKernel, blurRadius);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) printf("CUDA error after gaussianBlurKernel (horizontal): %s\n", cudaGetErrorString(err));
-    cudaDeviceSynchronize();
-
-    // 3. Gaussian Blur - Vertical pass
-    // Input: d_tempBlurImage, Output: d_finalBlurredImage
-    gaussianBlurKernel<<<numBlocks, threadsPerBlock>>>(d_tempBlurImage, d_finalBlurredImage, width, height, false, d_blurKernel, blurRadius);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) printf("CUDA error after gaussianBlurKernel (vertical): %s\n", cudaGetErrorString(err));
-    cudaDeviceSynchronize();
-
-    // 4. Additive Blend
-    // Input: d_renderedImage (original), d_finalBlurredImage (bloom), Output: d_finalOutputImage
-    additiveBlendKernel<<<numBlocks, threadsPerBlock>>>(d_renderedImage, d_finalBlurredImage, d_finalOutputImage, width, height, bloomIntensity);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) printf("CUDA error after additiveBlendKernel: %s\n", cudaGetErrorString(err));
+    applyBloomBlurKernel<<<numBlocks, threadsPerBlock>>>(input, weights, output, width, height, bloom_strength);
     cudaDeviceSynchronize();
 }
 
-// Helper function to generate 1D Gaussian kernel
-std::vector<float> generateGaussianKernel(int radius, float sigma) {
-    int kernelSize = 2 * radius + 1;
-    std::vector<float> kernel(kernelSize);
-    float sum = 0.0f;
-    for (int i = 0; i < kernelSize; ++i) {
-        float x = static_cast<float>(i - radius);
-        kernel[i] = expf(-(x * x) / (2.0f * sigma * sigma));
-        sum += kernel[i];
-    }
-    // Normalize the kernel
-    for (int i = 0; i < kernelSize; ++i) {
-        kernel[i] /= sum;
-    }
-    return kernel;
-}
 
 // Host main for GPU version
 int main() {
@@ -591,31 +562,23 @@ int main() {
     cudaMemcpy(d_backgroundData, backgroundImageData.data(), bg_bytes, cudaMemcpyHostToDevice);
 
     // Allocate device memory for output image (from render pass)
-    unsigned char* d_outputImage; // This will hold the result of renderPerspectiveKernel
+    unsigned char* d_outputImageBack; // This will hold the result of renderPerspectiveKernel backgorund
+    unsigned char* d_outputImageFore;
+    unsigned char* d_outputImage;
+    float* d_bloomWeights;
+    unsigned char *bloomed_foreground;
+
     size_t out_bytes = outputWidth * outputHeight * 3 * sizeof(unsigned char);
-    cudaMalloc(&d_outputImage, out_bytes);
+    size_t weight_bytes = outputWidth * outputHeight * sizeof(float);
 
-    // Allocate device memory for bloom effect
-    unsigned char* d_brightPassImage;
-    unsigned char* d_tempBlurImage;
-    unsigned char* d_finalBlurredImage;
-    unsigned char* d_bloomResultImage; // Final image with bloom effect applied
-    cudaMalloc(&d_brightPassImage, out_bytes);
-    cudaMalloc(&d_tempBlurImage, out_bytes);
-    cudaMalloc(&d_finalBlurredImage, out_bytes);
-    cudaMalloc(&d_bloomResultImage, out_bytes); // This will be the target for launchBloomEffect
+    cudaMalloc(&d_outputImageBack, out_bytes);
+    cudaMalloc(&d_outputImageFore, out_bytes);
+    cudaMalloc(&d_outputImage, out_bytes); 
 
-    // Bloom parameters
-    float brightnessThreshold = 0.7f; // Example: Pixels brighter than 70% luminance
-    int blurRadius = 5;               // Example: 11x11 blur kernel (radius 5)
-    float blurSigma = 2.5f;           // Sigma for Gaussian
-    float bloomIntensity = 1.0f;      // Intensity of the bloom effect
+    cudaMalloc(&d_bloomWeights, weight_bytes);
+    cudaMalloc(&bloomed_foreground, out_bytes);
 
-    // Generate Gaussian kernel on CPU
-    std::vector<float> h_blurKernel = generateGaussianKernel(blurRadius, blurSigma);
-    float* d_blurKernel;
-    cudaMalloc(&d_blurKernel, h_blurKernel.size() * sizeof(float));
-    cudaMemcpy(d_blurKernel, h_blurKernel.data(), h_blurKernel.size() * sizeof(float), cudaMemcpyHostToDevice);
+
 
     std::vector<unsigned char> renderedImage(outputWidth * outputHeight * 3);
 
@@ -647,41 +610,42 @@ int main() {
             d_backgroundData,
             bg_width,
             bg_height,
-            d_outputImage, // Output of render kernel
+            d_outputImageBack, // Output of render kernel 1
+            d_outputImageFore,
             outputWidth,
             outputHeight
         );
 
-        // Apply bloom effect
-        // d_outputImage is the input (original render)
-        // d_bloomResultImage is the final output (original + bloom)
-        launchBloomEffect(
-            d_outputImage,        // d_renderedImage (original from render pass)
-            d_brightPassImage,    
-            d_tempBlurImage,      
-            d_finalBlurredImage,  
-            d_bloomResultImage,   // d_finalOutputImage (this will have original + bloom)
-            outputWidth, outputHeight,
-            brightnessThreshold,
-            blurRadius,
-            d_blurKernel,
-            bloomIntensity
-        );
-        
-        // Copy result (with bloom) back to host
+        // Ok the addition works now we need to apply the blur
+        /*
+        Ok how do I even get started?? 
+        - First we know that the magnitude of the accumalated color determines teh intensity of
+            of the gaussian blur 
+        - Then we need to apply the blur speerately for each pixel?? How does it work in parallel?? And 
+        each pixel need to have a different intensity. 
+        - Oh yeah oparellization is  abig prblem and we cannot have to have it sequential
+        */ 
+    
+        /* FINAL PLAN 
+            - First have a weighst 2d array storing the brigtness intensity of each pizel as a weight to be used later 
+            for the blur 
+            - 
+        */
+
+        launchComputeBloomWeightsKernel(d_outputImageFore, d_bloomWeights, outputWidth, outputHeight);
+        float bloom_strength = 0.5f;
+        launchBloomKernel(d_outputImageFore, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, bloom_strength);
+
+        launchAddOutputsKernel(d_outputImage, d_outputImageBack, bloomed_foreground, outputWidth, outputHeight); 
         cudaMemcpy(renderedImage.data(), d_outputImage, out_bytes, cudaMemcpyDeviceToHost);
 
         saveBMP(filename_buffer, renderedImage, outputWidth, outputHeight);
     }
 
     cudaFree(d_backgroundData);
-    cudaFree(d_outputImage);
-    // Free bloom effect memory
-    cudaFree(d_brightPassImage);
-    cudaFree(d_tempBlurImage);
-    cudaFree(d_finalBlurredImage);
-    cudaFree(d_bloomResultImage);
-    cudaFree(d_blurKernel);
+    cudaFree(d_outputImageBack);
+    cudaFree(d_outputImageFore);
+    cudaFree(d_bloomWeights);
 
     std::cout << "Animation rendering finished." << std::endl;
     std::cout << "You can now use a tool like ffmpeg to create a video from the frame_xxxx.bmp files." << std::endl;
