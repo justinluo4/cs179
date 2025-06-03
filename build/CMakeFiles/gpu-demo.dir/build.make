@@ -53,10 +53,10 @@ RM = /usr/local/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/jluo2/cs179
+CMAKE_SOURCE_DIR = /home/sadeshmu/cs179
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/jluo2/cs179/build
+CMAKE_BINARY_DIR = /home/sadeshmu/cs179/build
 
 # Include any dependencies generated for this target.
 include CMakeFiles/gpu-demo.dir/depend.make
@@ -74,10 +74,10 @@ CMakeFiles/gpu-demo.dir/codegen:
 
 CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o: CMakeFiles/gpu-demo.dir/flags.make
 CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o: CMakeFiles/gpu-demo.dir/includes_CUDA.rsp
-CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o: /home/jluo2/cs179/src/gpu_demo.cu
+CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o: /home/sadeshmu/cs179/src/gpu_demo.cu
 CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o: CMakeFiles/gpu-demo.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CUDA object CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o"
-	/usr/local/cuda-12.5/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o -MF CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o.d -x cu -c /home/jluo2/cs179/src/gpu_demo.cu -o CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CUDA object CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o"
+	/usr/local/cuda-12.5/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o -MF CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o.d -x cu -c /home/sadeshmu/cs179/src/gpu_demo.cu -o CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o
 
 CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CUDA source to CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.i"
@@ -88,39 +88,39 @@ CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.s: cmake_force
 	$(CMAKE_COMMAND) -E cmake_unimplemented_variable CMAKE_CUDA_CREATE_ASSEMBLY_SOURCE
 
 CMakeFiles/gpu-demo.dir/src/file_io.cpp.o: CMakeFiles/gpu-demo.dir/flags.make
-CMakeFiles/gpu-demo.dir/src/file_io.cpp.o: /home/jluo2/cs179/src/file_io.cpp
+CMakeFiles/gpu-demo.dir/src/file_io.cpp.o: /home/sadeshmu/cs179/src/file_io.cpp
 CMakeFiles/gpu-demo.dir/src/file_io.cpp.o: CMakeFiles/gpu-demo.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/gpu-demo.dir/src/file_io.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/file_io.cpp.o -MF CMakeFiles/gpu-demo.dir/src/file_io.cpp.o.d -o CMakeFiles/gpu-demo.dir/src/file_io.cpp.o -c /home/jluo2/cs179/src/file_io.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/gpu-demo.dir/src/file_io.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/file_io.cpp.o -MF CMakeFiles/gpu-demo.dir/src/file_io.cpp.o.d -o CMakeFiles/gpu-demo.dir/src/file_io.cpp.o -c /home/sadeshmu/cs179/src/file_io.cpp
 
 CMakeFiles/gpu-demo.dir/src/file_io.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/gpu-demo.dir/src/file_io.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/jluo2/cs179/src/file_io.cpp > CMakeFiles/gpu-demo.dir/src/file_io.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sadeshmu/cs179/src/file_io.cpp > CMakeFiles/gpu-demo.dir/src/file_io.cpp.i
 
 CMakeFiles/gpu-demo.dir/src/file_io.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/gpu-demo.dir/src/file_io.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/jluo2/cs179/src/file_io.cpp -o CMakeFiles/gpu-demo.dir/src/file_io.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sadeshmu/cs179/src/file_io.cpp -o CMakeFiles/gpu-demo.dir/src/file_io.cpp.s
 
 CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o: CMakeFiles/gpu-demo.dir/flags.make
-CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o: /home/jluo2/cs179/src/HostBuffer.cpp
+CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o: /home/sadeshmu/cs179/src/HostBuffer.cpp
 CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o: CMakeFiles/gpu-demo.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o -MF CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o.d -o CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o -c /home/jluo2/cs179/src/HostBuffer.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o -MF CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o.d -o CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o -c /home/sadeshmu/cs179/src/HostBuffer.cpp
 
 CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/jluo2/cs179/src/HostBuffer.cpp > CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sadeshmu/cs179/src/HostBuffer.cpp > CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.i
 
 CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/jluo2/cs179/src/HostBuffer.cpp -o CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sadeshmu/cs179/src/HostBuffer.cpp -o CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.s
 
 CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o: CMakeFiles/gpu-demo.dir/flags.make
 CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o: CMakeFiles/gpu-demo.dir/includes_CUDA.rsp
-CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o: /home/jluo2/cs179/src/CudaBuffer.cu
+CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o: /home/sadeshmu/cs179/src/CudaBuffer.cu
 CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o: CMakeFiles/gpu-demo.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CUDA object CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o"
-	/usr/local/cuda-12.5/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o -MF CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o.d -x cu -c /home/jluo2/cs179/src/CudaBuffer.cu -o CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CUDA object CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o"
+	/usr/local/cuda-12.5/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o -MF CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o.d -x cu -c /home/sadeshmu/cs179/src/CudaBuffer.cu -o CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o
 
 CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CUDA source to CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.i"
@@ -146,7 +146,7 @@ gpu-demo: CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o
 gpu-demo: CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o
 gpu-demo: CMakeFiles/gpu-demo.dir/build.make
 gpu-demo: CMakeFiles/gpu-demo.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable gpu-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable gpu-demo"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/gpu-demo.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -158,6 +158,6 @@ CMakeFiles/gpu-demo.dir/clean:
 .PHONY : CMakeFiles/gpu-demo.dir/clean
 
 CMakeFiles/gpu-demo.dir/depend:
-	cd /home/jluo2/cs179/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/jluo2/cs179 /home/jluo2/cs179 /home/jluo2/cs179/build /home/jluo2/cs179/build /home/jluo2/cs179/build/CMakeFiles/gpu-demo.dir/DependInfo.cmake "--color=$(COLOR)"
+	cd /home/sadeshmu/cs179/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/sadeshmu/cs179 /home/sadeshmu/cs179 /home/sadeshmu/cs179/build /home/sadeshmu/cs179/build /home/sadeshmu/cs179/build/CMakeFiles/gpu-demo.dir/DependInfo.cmake "--color=$(COLOR)"
 .PHONY : CMakeFiles/gpu-demo.dir/depend
 

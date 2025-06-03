@@ -54,10 +54,10 @@ RM = /usr/local/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/jluo2/cs179
+CMAKE_SOURCE_DIR = /home/sadeshmu/cs179
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/jluo2/cs179/build
+CMAKE_BINARY_DIR = /home/sadeshmu/cs179/build
 
 #=============================================================================
 # Directory level rules for the build root directory
@@ -88,14 +88,14 @@ clean: CMakeFiles/cpu-demo.dir/clean
 CMakeFiles/gpu-demo.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=4,5,6,7,8 "Built target gpu-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=4,5,6,7,8 "Built target gpu-demo"
 .PHONY : CMakeFiles/gpu-demo.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/gpu-demo.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jluo2/cs179/build/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sadeshmu/cs179/build/CMakeFiles 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/gpu-demo.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jluo2/cs179/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sadeshmu/cs179/build/CMakeFiles 0
 .PHONY : CMakeFiles/gpu-demo.dir/rule
 
 # Convenience name for target.
@@ -105,7 +105,7 @@ gpu-demo: CMakeFiles/gpu-demo.dir/rule
 # codegen rule for target.
 CMakeFiles/gpu-demo.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/gpu-demo.dir/build.make CMakeFiles/gpu-demo.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=4,5,6,7,8 "Finished codegen for target gpu-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=4,5,6,7,8 "Finished codegen for target gpu-demo"
 .PHONY : CMakeFiles/gpu-demo.dir/codegen
 
 # clean rule for target.
@@ -120,14 +120,14 @@ CMakeFiles/gpu-demo.dir/clean:
 CMakeFiles/cpu-demo.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=1,2,3 "Built target cpu-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=1,2,3 "Built target cpu-demo"
 .PHONY : CMakeFiles/cpu-demo.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/cpu-demo.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jluo2/cs179/build/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sadeshmu/cs179/build/CMakeFiles 3
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/cpu-demo.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jluo2/cs179/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sadeshmu/cs179/build/CMakeFiles 0
 .PHONY : CMakeFiles/cpu-demo.dir/rule
 
 # Convenience name for target.
@@ -137,7 +137,7 @@ cpu-demo: CMakeFiles/cpu-demo.dir/rule
 # codegen rule for target.
 CMakeFiles/cpu-demo.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cpu-demo.dir/build.make CMakeFiles/cpu-demo.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/jluo2/cs179/build/CMakeFiles --progress-num=1,2,3 "Finished codegen for target cpu-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sadeshmu/cs179/build/CMakeFiles --progress-num=1,2,3 "Finished codegen for target cpu-demo"
 .PHONY : CMakeFiles/cpu-demo.dir/codegen
 
 # clean rule for target.
