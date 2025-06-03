@@ -32,6 +32,9 @@ struct RayTraceResult {
     bool hitEventHorizon;
     Vec3f accumulatedColor; // Accumulated color of the ray
     bool hitDisk; // True if the ray entered the accretion disk
+    bool hitPlanet;
+    Vec3f planetAlbedo;     // Color from planet texture
+    float intersectionDistance; // Stores closest t_hit for opaque objects
     __host__ __device__ RayTraceResult() : finalDir(0,0,0), hitEventHorizon(false), accumulatedColor(0,0,0), hitDisk(false) {}
 };
 
