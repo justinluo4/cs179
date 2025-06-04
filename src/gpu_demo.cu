@@ -138,7 +138,7 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     y_axis_2d_plane = b_vec_3d.normalize();
     Vec3f x_axis_2d_plane = rayDir;
 
-    float s_max_integration_dist = INTEGRATION_DISTANCE_MULTIPLIER * BH_RSCHWARZSCHILD_RADIUS;
+    float s_max_integration_dist = IN TEGRATION_DISTANCE_MULTIPLIER * BH_RSCHWARZSCHILD_RADIUS;
     if (s_max_integration_dist < b_impact_param_3d * 2.5f) s_max_integration_dist = b_impact_param_3d * 2.5f;
     if (s_max_integration_dist < 20.0f * BH_RSCHWARZSCHILD_RADIUS) s_max_integration_dist = 20.0f * BH_RSCHWARZSCHILD_RADIUS;
     if (s_max_integration_dist <= 0.0f) s_max_integration_dist = 10.0f;
