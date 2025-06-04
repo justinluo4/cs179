@@ -34,11 +34,11 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 #define DISK_BASE_COLOR_R 1.0f
 #define DISK_BASE_COLOR_G 0.4f
 #define DISK_BASE_COLOR_B 0.1f
-#define DISK_MAX_BRIGHTNESS 2.0f
+#define DISK_MAX_BRIGHTNESS 5.0f
 // RayTraceResult for device
 
 // Camera struct for device
-#define BLOOM_FACTOR 10.0f
+#define BLOOM_FACTOR 3.0f
 
 
 // Device: get pixel color from direction
@@ -240,7 +240,7 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
                     float vy_norm = ty / t_len;
                     Vec3f finalDir = (x_axis_2d_plane * vx_norm + y_axis_2d_plane * vy_norm).normalize();
                     float dot_factor = finalDir.dot(DISK_NORMAL_VEC);
-                    result.accumulatedColor = result.accumulatedColor + DISK_BASE_COLOR_VEC * disk_brightness_factor * (1.0f / (fabsf(dot_factor) + EPSILON_BH));
+                    result.accumulatedColor = result.accumulatedColor + DISK_BASE_COLOR_VEC * disk_brightness_factor * (1.0f / (fabsf(dot_factor) + 0.1f));
                 }
             }
         }
@@ -430,7 +430,7 @@ void computeBloomWeights(const float* foreground, float* weights, int width, int
     float g = foreground[pix_idx + 1];
     float b = foreground[pix_idx + 2];
 
-    float intensity = sqrtf(r*r + g*g + b*b); // or use 0.2126*r + 0.7152*g + 0.0722*b for perceptual
+    float intensity = sqrtf(r + g + b); // or use 0.2126*r + 0.7152*g + 0.0722*b for perceptual
     weights[idx] = intensity;
 }
 
@@ -524,7 +524,7 @@ void applyBloomKernel(const float* foreground, const float* weights, float *accu
     float r = foreground[inputIdx + 0];
     float g = foreground[inputIdx + 1];
     float b = foreground[inputIdx + 2];
-    float norm_factor = (radius * (radius + 1) * (2*radius + 1)) / 6.0f;
+    float norm_factor = radius * radius;
     for (int dy = -radius; dy <= radius; ++dy) {
         for (int dx = -radius; dx <= radius; ++dx) {
             int manhattan = abs(dx) + abs(dy);
@@ -534,7 +534,7 @@ void applyBloomKernel(const float* foreground, const float* weights, float *accu
             int ny = y + dy;
             if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
 
-            float weight = (1.0f - ((float)manhattan / (float)radius))/norm_factor * 10;
+            float weight = (1.0f - ((float)manhattan / (float)radius))/norm_factor;
             if (weight < 0.0f) continue;
 
             int outIdx = (ny * width + nx) * 3;
@@ -600,13 +600,13 @@ int main() {
 
     // Animation Parameters
     const int num_frames = 300;
-    const float orbit_radius = 60.0f;
+    const float orbit_radius = 40.0f;
     const float camera_z_offset = 0.0f;
 
     Vec3f worldUpVector(0.0f, 0.0f, 1.0f);
     float fieldOfViewY = 75.0f;
-    int outputWidth = 720;
-    int outputHeight = 480;
+    int outputWidth = 1920;
+    int outputHeight = 1080;
 
     char filename_buffer[256];
 
@@ -644,10 +644,10 @@ int main() {
 
     for (int frame = 0; frame < num_frames; ++frame) {
         cudaMemset (bloomed_foreground, 0, fore_bytes );
-        float angle =  PI * static_cast<float>(frame) / static_cast<float>(num_frames);
+        float angle =  2*PI * static_cast<float>(frame) / static_cast<float>(num_frames);
 
         Vec3f cameraPosition(
-            BH_POSITION_X + orbit_radius * std::cos(angle) + 20,
+            BH_POSITION_X + orbit_radius * std::cos(angle) + 10,
             BH_POSITION_Y + orbit_radius * std::sin(angle),
             camera_z_offset + 10.0f
         );
