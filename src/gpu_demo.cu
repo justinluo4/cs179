@@ -38,7 +38,7 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 // RayTraceResult for device
 
 // Camera struct for device
-#define BLOOM_FACTOR 3.0f
+#define BLOOM_FACTOR 8.0f
 
 
 // Device: get pixel color from direction
@@ -507,7 +507,8 @@ void launchComputeBloomWeightsKernel(const float* foreground, float* weights, in
 
 __global__
 void applyBloomKernel(const float* foreground, const float* weights, float *accum, 
-                    int width, int height, int maxRadius) {
+                    int width, int height, float maxRadius) 
+{
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= width * height) return;
@@ -524,7 +525,17 @@ void applyBloomKernel(const float* foreground, const float* weights, float *accu
     float r = foreground[inputIdx + 0];
     float g = foreground[inputIdx + 1];
     float b = foreground[inputIdx + 2];
-    float norm_factor = radius * radius;
+    // float norm_factor = (radius * (radius + 1) * (2*radius + 1)) / 6.0f;
+
+    float norm = 0.0f;
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            int manhattan = abs(dx) + abs(dy);
+            if (manhattan > radius) continue;
+            norm += 1.0f - ((float)manhattan / (float)radius);
+        }
+    }
+
     for (int dy = -radius; dy <= radius; ++dy) {
         for (int dx = -radius; dx <= radius; ++dx) {
             int manhattan = abs(dx) + abs(dy);
@@ -534,7 +545,7 @@ void applyBloomKernel(const float* foreground, const float* weights, float *accu
             int ny = y + dy;
             if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
 
-            float weight = (1.0f - ((float)manhattan / (float)radius))/norm_factor;
+            float weight = (1.0f - ((float)manhattan / (float)radius))/norm;
             if (weight < 0.0f) continue;
 
             int outIdx = (ny * width + nx) * 3;
@@ -543,15 +554,100 @@ void applyBloomKernel(const float* foreground, const float* weights, float *accu
             atomicAdd(&accum[outIdx + 2], b * weight);
         }
     }
+
+    // Instead try star shaped blur 
+
 }
 
 __global__
-void clampFloatImageToUchar(const float* input, unsigned char* output, int totalPixels) {
+void horizontalBloom(const float* foreground, const float* weights,
+                     float* accum, int width, int height, float maxRadius) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= totalPixels * 3) return;
+    if (idx >= width * height) return;
 
-    output[idx] = static_cast<unsigned char>(clampf(input[idx], 0.0f, 255.0f));
+    int x = idx % width;
+    int y = idx / width;
+
+    float strength = weights[idx];
+    if (strength < 1e-3f) return;
+
+    int radius = max(int(maxRadius * strength), 1);
+    float norm = radius + 1.0f; // ∑(1 - |i|/r) from -r to r
+
+    int inIdx = idx * 3;
+    float r = foreground[inIdx + 0];
+    float g = foreground[inIdx + 1];
+    float b = foreground[inIdx + 2];
+
+    for (int dx = -radius; dx <= radius; ++dx) {
+        int nx = x + dx;
+        if (nx < 0 || nx >= width) continue;
+
+        float weight = (1.0f - (abs(dx) / (float)radius)) / norm;
+        int outIdx = (y * width + nx) * 3;
+
+        atomicAdd(&accum[outIdx + 0], r * weight);
+        atomicAdd(&accum[outIdx + 1], g * weight);
+        atomicAdd(&accum[outIdx + 2], b * weight);
+    }
 }
+
+
+__global__
+void verticalBloom(const float* foreground, const float* weights,
+                   float* output, int width, int height, float maxRadius) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+
+    int x = idx % width;
+    int y = idx / width;
+
+    float strength = weights[idx];
+    if (strength < 1e-3f) return;
+
+    int radius = max(int(maxRadius * strength), 1);
+    float norm = radius + 1.0f;
+
+    int inIdx = idx * 3;
+    float r = foreground[inIdx + 0];
+    float g = foreground[inIdx + 1];
+    float b = foreground[inIdx + 2];
+
+    for (int dy = -radius; dy <= radius; ++dy) {
+        int ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+
+        float weight = (1.0f - (abs(dy) / (float)radius)) / norm;
+        int outIdx = (ny * width + x) * 3;
+
+        atomicAdd(&output[outIdx + 0], r * weight);
+        atomicAdd(&output[outIdx + 1], g * weight);
+        atomicAdd(&output[outIdx + 2], b * weight);
+    }
+}
+
+
+
+// __global__
+// void clampFloatImageToUchar(const float* input, unsigned char* output, int totalPixels) {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//     if (idx >= totalPixels * 3) return;
+
+//     output[idx] = static_cast<unsigned char>(clampf(input[idx], 0.0f, 255.0f));
+// }
+
+void launchTwoStepBloom(const float* foreground, const float* weights,
+                        float* accum, int width, int height, float maxRadius) {
+    int totalPixels = width * height;
+    int threadsPerBlock = 256;
+    int numBlocks = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
+
+    horizontalBloom<<<numBlocks, threadsPerBlock>>>(foreground, weights, accum, width, height, maxRadius);
+    verticalBloom<<<numBlocks, threadsPerBlock>>>(accum, weights, accum, width, height, maxRadius);
+
+    cudaDeviceSynchronize();
+}
+
 
 
 void launchManhattanBlurKernel(
@@ -674,27 +770,13 @@ int main() {
             outputHeight
         );
 
-        // Ok the addition works now we need to apply the blur
-        /*
-        Ok how do I even get started?? 
-        - First we know that the magnitude of the accumalated color determines teh intensity of
-            of the gaussian blur 
-        - Then we need to apply the blur speerately for each pixel?? How does it work in parallel?? And 
-        each pixel need to have a different intensity. 
-        - Oh yeah oparellization is  abig prblem and we cannot have to have it sequential
-        */ 
-    
-        /* FINAL PLAN 
-            - First have a weighst 2d array storing the brigtness intensity of each pizel as a weight to be used later 
-            for the blur 
-            - 
-        */
-
         launchComputeBloomWeightsKernel(d_outputImageFore, d_bloomWeights, outputWidth, outputHeight);
 
-        launchManhattanBlurKernel(d_outputImageFore, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, 12.0f);
+        // launchManhattanBlurKernel(d_outputImageFore, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, 12.0f);
+        launchTwoStepBloom(d_outputImageFore, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, BLOOM_FACTOR);
 
         launchAddOutputsKernel(d_outputImage, d_outputImageBack, bloomed_foreground, outputWidth, outputHeight); 
+        
         cudaMemcpy(renderedImage.data(), d_outputImage, out_bytes, cudaMemcpyDeviceToHost);
 
         saveBMP(filename_buffer, renderedImage, outputWidth, outputHeight);

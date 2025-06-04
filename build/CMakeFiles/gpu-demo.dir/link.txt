@@ -1,1 +1,0 @@
-/usr/bin/c++ "CMakeFiles/gpu-demo.dir/src/gpu_demo.cu.o" "CMakeFiles/gpu-demo.dir/src/file_io.cpp.o" "CMakeFiles/gpu-demo.dir/src/HostBuffer.cpp.o" "CMakeFiles/gpu-demo.dir/src/CudaBuffer.cu.o" -o gpu-demo   -L/usr/local/cuda-12.5/targets/x86_64-linux/lib/stubs  -L/usr/local/cuda-12.5/targets/x86_64-linux/lib  -lcudadevrt -lcudart_static -lrt -lpthread -ldl
