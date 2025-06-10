@@ -78,7 +78,7 @@ __device__ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane) 
 
     float theta = atan2f(dy, dx);
     float r_tex_normalized = (3.1 * distance + sinf(distance) + 2*sinf(distance*2.7) + 3 * sinf(distance / 3.2)) / DISK_OUTER_RADIUS;
-
+    r_tex_normalized = distance/DISK_OUTER_RADIUS;
     float radial_factor = 1.0f - ( (distance - DISK_INNER_RADIUS) / (DISK_OUTER_RADIUS - DISK_INNER_RADIUS) );
     radial_factor = fmaxf(0.0f, fminf(1.0f, radial_factor));
     
@@ -230,7 +230,10 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
                 // Use current_pos_world as the point for color factor, assuming it's close enough to the actual intersection point
                 // The procedural color function in CPU demo used `current_pos_3d` (which is `current_pos_world` here)
                 // and `BH_POSITION` as `disk_center_on_plane`. This seems correct.
-                float disk_brightness_factor = getDiskProceduralColorFactor(Vec3f(dist_to_bh_in_disk_plane, dist_to_bh_in_disk_plane, 0.0f));
+                Vec3f disk_project = point_on_disk_plane_world - BH_POSITION;
+                Vec3f x_disk = disk_project.normalize();
+                Vec3f y_disk = DISK_NORMAL_VEC.cross(x_disk).normalize();
+                float disk_brightness_factor = getDiskProceduralColorFactor(Vec3f(x_disk.dot(disk_project), y_disk.dot(disk_project), 0.0f));
                 if (disk_brightness_factor > 0.0f) {
                     result.hitDisk = true; // Mark that disk was hit at least once
                     // Accumulate color. If ray passes through multiple times, this will add up.
@@ -640,14 +643,14 @@ void verticalBloom(const float* foreground, const float* weights,
 //     output[idx] = static_cast<unsigned char>(clampf(input[idx], 0.0f, 255.0f));
 // }
 
-void launchTwoStepBloom(const float* foreground, const float* weights,
+void launchTwoStepBloom(const float* foreground, float *bloomed_foreground, const float* weights,
                         float* accum, int width, int height, float maxRadius) {
     int totalPixels = width * height;
     int threadsPerBlock = 256;
     int numBlocks = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
 
     horizontalBloom<<<numBlocks, threadsPerBlock>>>(foreground, weights, accum, width, height, maxRadius);
-    verticalBloom<<<numBlocks, threadsPerBlock>>>(accum, weights, accum, width, height, maxRadius);
+    verticalBloom<<<numBlocks, threadsPerBlock>>>(accum, weights, bloomed_foreground, width, height, maxRadius);
 
     cudaDeviceSynchronize();
 }
@@ -777,7 +780,7 @@ int main() {
         launchComputeBloomWeightsKernel(d_outputImageFore, d_bloomWeights, outputWidth, outputHeight);
 
         // launchManhattanBlurKernel(d_outputImageFore, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, 12.0f);
-        launchTwoStepBloom(d_outputImageFore, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, BLOOM_FACTOR);
+        launchTwoStepBloom(d_outputImageFore, bloomed_foreground, d_bloomWeights, bloomed_foreground, outputWidth, outputHeight, BLOOM_FACTOR);
 
         launchAddOutputsKernel(d_outputImage, d_outputImageBack, bloomed_foreground, outputWidth, outputHeight); 
         
