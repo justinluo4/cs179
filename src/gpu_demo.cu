@@ -89,6 +89,8 @@ __device__ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane) 
     return fmaxf(0.0f, fminf(DISK_MAX_BRIGHTNESS, brightness));
 }
 
+__device__
+
 // Device: ray tracing near black hole
 __device__
 RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir) {
@@ -167,6 +169,8 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     float disk_distance_prev = 0.0f;
     const Vec3f DISK_NORMAL_VEC(DISK_NORMAL_X, DISK_NORMAL_Y, DISK_NORMAL_Z);
     const Vec3f DISK_BASE_COLOR_VEC(DISK_BASE_COLOR_R, DISK_BASE_COLOR_G, DISK_BASE_COLOR_B);
+    const Vec3f DISK_X_AXIS = DISK_NORMAL_VEC.cross(Vec3f(1.0f, 0.0f, 0.0f)).normalize();
+    const Vec3f DISK_Y_AXIS = DISK_NORMAL_VEC.cross(DISK_X_AXIS).normalize();
 
     for (int i = 0; i < NUM_INTEGRATION_STEPS; ++i) {
         float r_sq = x_pos * x_pos + y_pos * y_pos;
