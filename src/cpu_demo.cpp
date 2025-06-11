@@ -26,6 +26,7 @@ struct Vec3f {
 
     Vec3f operator+(const Vec3f& other) const { return Vec3f(x + other.x, y + other.y, z + other.z); }
     Vec3f operator-(const Vec3f& other) const { return Vec3f(x - other.x, y - other.y, z - other.z); }
+    Vec3f operator*(const Vec3f& other) const { return Vec3f(x * other.x, y * other.y, z * other.z); }
     Vec3f operator*(float scalar) const { return Vec3f(x * scalar, y * scalar, z * scalar); }
     Vec3f operator/(float scalar) const {
         if (scalar == 0.0f) {

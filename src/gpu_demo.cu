@@ -16,13 +16,13 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 
 // Black Hole and rendering constants
 #define PI 3.14159265358979f
-#define BH_POSITION_X 50.0f
+#define BH_POSITION_X 30.0f
 #define BH_POSITION_Y 0.0f
 #define BH_POSITION_Z 0.0f
 #define BH_RSCHWARZSCHILD_RADIUS 2.0f
 #define EVENT_HORIZON_RADIUS 2.0f
 #define INTEGRATION_DISTANCE_MULTIPLIER 50.0f
-#define NUM_INTEGRATION_STEPS 800
+#define NUM_INTEGRATION_STEPS 1000
 #define EPSILON_BH 1e-4f
 
 // Accretion Disk Parameters
@@ -82,14 +82,14 @@ __device__ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane, 
     float theta = atan2f(dy, dx);
     float r_tex_normalized = distance/DISK_OUTER_RADIUS * 5;
     float brightness = 0.0f;
-    int N = 40;
+    int N = 80;
     for (int i = 1; i <= N; i++) {
         float amp_factor = 1 + sinf(i*i + theta + t);
         amp_factor /= sqrtf(i);
         float brightness_i = DISK_MAX_BRIGHTNESS * amp_factor * sinf(i*r_tex_normalized + i*i*i + theta + t);
         brightness += brightness_i;
     }
-    brightness /= N/4;
+    brightness /= sqrtf(N);
     brightness = brightness * brightness + 0.4f;
     brightness *= 1/r_tex_normalized;
     
@@ -97,12 +97,16 @@ __device__ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane, 
 }
 
 __device__ float SDF(const Vec3f& point) {
-    float dx = point.x - PLANET_POSITION_X;
-    float dy = point.y - PLANET_POSITION_Y;
-    float dz = point.z - PLANET_POSITION_Z;
-    float distance = sqrtf(dx*dx + dy*dy + dz*dz);
-    float d = distance - PLANET_RADIUS;
-    return d;
+    Vec3f p = point - Vec3f(PLANET_POSITION_X, PLANET_POSITION_Y, PLANET_POSITION_Z);
+    float half_side = PLANET_RADIUS / 2.0f;
+    Vec3f q = Vec3f(fabsf(p.x), fabsf(p.y), fabsf(p.z)) - Vec3f(half_side, half_side, half_side);
+    
+    Vec3f q_max0(fmaxf(q.x, 0.0f), fmaxf(q.y, 0.0f), fmaxf(q.z, 0.0f));
+    float outside_dist = q_max0.length();
+
+    float inside_dist = fminf(fmaxf(q.x, fmaxf(q.y, q.z)), 0.0f);
+    
+    return outside_dist + inside_dist;
 }
 
 __device__ Vec3f getPlanetColor(const Vec3f& point) {
@@ -213,6 +217,8 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     const Vec3f DISK_Y_AXIS = DISK_NORMAL_VEC.cross(DISK_X_AXIS).normalize();
 
     for (int i = 0; i < NUM_INTEGRATION_STEPS; ++i) {
+        ds_step = (2.0f * s_max_integration_dist) / (float)NUM_INTEGRATION_STEPS;
+
         float r_sq = x_pos * x_pos + y_pos * y_pos;
         float r_current = sqrtf(r_sq);
 
@@ -251,19 +257,24 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
         Vec3f current_pos_relative_to_BH = x_axis_2d_plane * x_pos + y_axis_2d_plane * y_pos;
         Vec3f current_pos_world = BH_POSITION + current_pos_relative_to_BH;
         float sdf_value = SDF(current_pos_world);
-        if (sdf_value < 0.0f) {
+        ds_step = fminf(ds_step, sdf_value);
+        if (sdf_value < 0.001f) {
             result.hitPlanet = true;
             result.planetAlbedo = getPlanetColor(current_pos_world);
+            Vec3f light_color(DISK_BASE_COLOR_R, DISK_BASE_COLOR_G, DISK_BASE_COLOR_B);
+            Vec3f bg_color(1.0f, 1.0f, 1.0f);   
             Vec3f planet_normal = getSDFGradient(current_pos_world);
             Vec3f to_BH = BH_POSITION - current_pos_world;
             Vec3f to_BH_normalized = to_BH.normalize();
-            float specular_factor = to_BH_normalized.dot(planet_normal);
+            Vec3f reflected_dir = rayDir - (planet_normal * 2.0f * rayDir.dot(planet_normal));
+            reflected_dir = reflected_dir.normalize();
+            float specular_factor = to_BH_normalized.dot(reflected_dir);
             specular_factor = fmaxf(0.0f, specular_factor);
             specular_factor = powf(specular_factor, 10.0f);
-            float diffuse_factor = to_BH_normalized.dot(planet_normal) / 2.0f;
+            float diffuse_factor = to_BH_normalized.dot(planet_normal) * 0.2f;
             diffuse_factor = fmaxf(0.0f, diffuse_factor);
             float ambient_factor = 0.1f;
-            result.accumulatedColor = result.accumulatedColor + result.planetAlbedo * (diffuse_factor + specular_factor + ambient_factor);
+            result.accumulatedColor = result.accumulatedColor + result.planetAlbedo * (light_color * (diffuse_factor + specular_factor) + bg_color * ambient_factor);
             return result;
         }
         disk_distance_prev = disk_distance; // Store previous distance for crossing check
@@ -320,7 +331,6 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
                 }
             }
         }
-        ds_step = (s_max_integration_dist*1.5f) / (float)NUM_INTEGRATION_STEPS + fabsf(disk_distance) / 10.0f;
     }
 
     float r_final = sqrtf(x_pos * x_pos + y_pos * y_pos);

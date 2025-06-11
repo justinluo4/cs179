@@ -10,6 +10,7 @@ struct Vec3f {
     __host__ __device__ Vec3f(float x = 0.0f, float y = 0.0f, float z = 0.0f) : x(x), y(y), z(z) {}
     __host__ __device__ Vec3f operator+(const Vec3f& other) const { return Vec3f(x + other.x, y + other.y, z + other.z); }
     __host__ __device__ Vec3f operator-(const Vec3f& other) const { return Vec3f(x - other.x, y - other.y, z - other.z); }
+    __host__ __device__ Vec3f operator*(const Vec3f& other) const { return Vec3f(x * other.x, y * other.y, z * other.z); }
     __host__ __device__ Vec3f operator*(float scalar) const { return Vec3f(x * scalar, y * scalar, z * scalar); }
     __host__ __device__ float dot(const Vec3f& other) const { return x * other.x + y * other.y + z * other.z; }
     __host__ __device__ Vec3f cross(const Vec3f& other) const {
