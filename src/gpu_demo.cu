@@ -16,7 +16,7 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 
 // Black Hole and rendering constants
 #define PI 3.14159265358979f
-#define BH_POSITION_X 30.0f
+#define BH_POSITION_X 35.0f
 #define BH_POSITION_Y 0.0f
 #define BH_POSITION_Z 0.0f
 #define BH_RSCHWARZSCHILD_RADIUS 2.0f
