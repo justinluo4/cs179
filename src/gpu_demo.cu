@@ -27,8 +27,8 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 
 // Accretion Disk Parameters
 #define DISK_NORMAL_X 0.0f
-#define DISK_NORMAL_Y 0.8f
-#define DISK_NORMAL_Z 0.6f
+#define DISK_NORMAL_Y 0.0f
+#define DISK_NORMAL_Z 1.0f
 #define DISK_INNER_RADIUS (EVENT_HORIZON_RADIUS * 3.0f)
 #define DISK_OUTER_RADIUS (EVENT_HORIZON_RADIUS * 15.0f)
 #define DISK_BASE_COLOR_R 1.0f
@@ -112,7 +112,7 @@ __device__ Vec3f opLimitedRepetition( Vec3f p, float s, int l )
 
 __device__ float SDF(const Vec3f& point) {
     Vec3f p = point - Vec3f(PLANET_POSITION_X, PLANET_POSITION_Y, PLANET_POSITION_Z);
-    p = opLimitedRepetition(p, PLANET_REPETITION_SCALE, 2);
+    // p = opLimitedRepetition(p, PLANET_REPETITION_SCALE, 2);
     float half_side = PLANET_RADIUS / 2.0f;
     Vec3f q = Vec3f(fabsf(p.x), fabsf(p.y), fabsf(p.z)) - Vec3f(half_side, half_side, half_side);
     
@@ -124,7 +124,7 @@ __device__ float SDF(const Vec3f& point) {
     Vec3f sphere_center = p + Vec3f(0.0f, half_side, 0.0f);
     float sphere_dist = sphere_center.length() - PLANET_RADIUS/2.0f;
     float dist = smin(box_dist, sphere_dist, 0.5f);
-    return box_dist;
+    return sphere_dist;
 }
 
 __device__ Vec3f getPlanetColor(const Vec3f& point) {
@@ -799,14 +799,14 @@ int main() {
     std::cout << "Successfully read background BMP image with dimensions: " << bg_width << "x" << bg_height << std::endl;
 
     // Animation Parameters
-    const int num_frames = 600;
+    const int num_frames = 120;
     const float frame_rate = 24.0f;
-    const float orbit_radius = 100.0f;
-    const float camera_z_offset = 10.0f;
+    const float orbit_radius = 60.0f;
+    const float camera_z_offset = 5.0f;
 
     Vec3f worldUpVector(0.0f, 0.0f, 1.0f);
     float fieldOfViewY = 75.0f;
-    int outputWidth = 1000;
+    int outputWidth = 2000;
     int outputHeight = 1000;
 
     char filename_buffer[256];
