@@ -16,7 +16,7 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 
 // Black Hole and rendering constants
 #define PI 3.14159265358979f
-#define BH_POSITION_X 35.0f
+#define BH_POSITION_X 0.0f
 #define BH_POSITION_Y 0.0f
 #define BH_POSITION_Z 0.0f
 #define BH_RSCHWARZSCHILD_RADIUS 2.0f
@@ -35,14 +35,14 @@ __device__ float clampf(float x, float a, float b) { return fminf(fmaxf(x, a), b
 #define DISK_BASE_COLOR_G 0.4f
 #define DISK_BASE_COLOR_B 0.1f
 #define DISK_MAX_BRIGHTNESS 5.0f
-// RayTraceResult for device
 
-// Camera struct for device
+
 #define BLOOM_FACTOR 8.0f
-#define PLANET_RADIUS 10.0f
-#define PLANET_POSITION_X 0.0f
-#define PLANET_POSITION_Y 0.0f
-#define PLANET_POSITION_Z 0.0f
+#define PLANET_RADIUS 14.0f
+#define PLANET_REPETITION_SCALE 40.0f
+#define PLANET_POSITION_X -20.0f
+#define PLANET_POSITION_Y -20.0f
+#define PLANET_POSITION_Z -20.0f
 
 // Device: get pixel color from direction
 __device__
@@ -96,8 +96,23 @@ __device__ float getDiskProceduralColorFactor(const Vec3f& point_on_disk_plane, 
     return fmaxf(0.0f, brightness);
 }
 
+__device__ float smin( float a, float b, float k )
+{
+    k *= 1.0;
+    float r = exp2f(-a/k) + exp2f(-b/k);
+    return -k*log2f(r);
+}
+
+
+__device__ Vec3f opLimitedRepetition( Vec3f p, float s, int l )
+{
+    Vec3f q = p - Vec3f(clampf(roundf(p.x*(1/s)),-l+1,l), clampf(roundf(p.y*(1/s)),-l+1,l), clampf(roundf(p.z*(1/s)),-l+1,l)) * s;
+    return q;
+}
+
 __device__ float SDF(const Vec3f& point) {
     Vec3f p = point - Vec3f(PLANET_POSITION_X, PLANET_POSITION_Y, PLANET_POSITION_Z);
+    p = opLimitedRepetition(p, PLANET_REPETITION_SCALE, 2);
     float half_side = PLANET_RADIUS / 2.0f;
     Vec3f q = Vec3f(fabsf(p.x), fabsf(p.y), fabsf(p.z)) - Vec3f(half_side, half_side, half_side);
     
@@ -105,8 +120,11 @@ __device__ float SDF(const Vec3f& point) {
     float outside_dist = q_max0.length();
 
     float inside_dist = fminf(fmaxf(q.x, fmaxf(q.y, q.z)), 0.0f);
-    
-    return outside_dist + inside_dist;
+    float box_dist = outside_dist + inside_dist;
+    Vec3f sphere_center = p + Vec3f(0.0f, half_side, 0.0f);
+    float sphere_dist = sphere_center.length() - PLANET_RADIUS/2.0f;
+    float dist = smin(box_dist, sphere_dist, 0.5f);
+    return box_dist;
 }
 
 __device__ Vec3f getPlanetColor(const Vec3f& point) {
@@ -136,7 +154,7 @@ __device__ Vec3f getSDFGradient(const Vec3f& point) {
 
 // Device: ray tracing near black hole
 __device__
-RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir, const float current_time) {
+RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir, const float current_time, bool is_reflection = false) {
     RayTraceResult result;
     result.finalDir = rayDir;
     result.hitEventHorizon = false;
@@ -153,25 +171,6 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
     Vec3f b_vec_3d = P_ca - BH_POSITION;
     float b_impact_param_3d = b_vec_3d.length();
 
-    // Vec3f O_minus_C = rayOrigin - BH_POSITION;
-    // float a_quad = rayDir.dot(rayDir);
-    // float b_quad = 2.0f * rayDir.dot(O_minus_C);
-    // float c_quad = O_minus_C.dot(O_minus_C) - EVENT_HORIZON_RADIUS * EVENT_HORIZON_RADIUS;
-    // float discriminant = b_quad * b_quad - 4.0f * a_quad * c_quad;
-
-    // if (discriminant >= 0.0f) {
-    //     float t0 = (-b_quad - sqrtf(discriminant)) / (2.0f * a_quad);
-    //     float t1 = (-b_quad + sqrtf(discriminant)) / (2.0f * a_quad);
-    //     if (t0 > 0 || t1 > 0) {
-    //         float t_intersect = (t0 > 0 && t1 > 0) ? fminf(t0, t1) : fmaxf(t0, t1);
-    //         if (t_intersect > 0) {
-    //             if (b_impact_param_3d < EVENT_HORIZON_RADIUS && t_ca > 0) {
-    //                 result.hitEventHorizon = true;
-    //                 return result;
-    //             }
-    //         }
-    //     }
-    // }
 
     Vec3f y_axis_2d_plane;
     if (b_impact_param_3d < EPSILON_BH) {
@@ -256,26 +255,48 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
         // with the BH at the origin of this 2D system.
         Vec3f current_pos_relative_to_BH = x_axis_2d_plane * x_pos + y_axis_2d_plane * y_pos;
         Vec3f current_pos_world = BH_POSITION + current_pos_relative_to_BH;
+
         float sdf_value = SDF(current_pos_world);
         ds_step = fminf(ds_step, sdf_value);
         if (sdf_value < 0.001f) {
-            result.hitPlanet = true;
-            result.planetAlbedo = getPlanetColor(current_pos_world);
-            Vec3f light_color(DISK_BASE_COLOR_R, DISK_BASE_COLOR_G, DISK_BASE_COLOR_B);
-            Vec3f bg_color(1.0f, 1.0f, 1.0f);   
             Vec3f planet_normal = getSDFGradient(current_pos_world);
-            Vec3f to_BH = BH_POSITION - current_pos_world;
-            Vec3f to_BH_normalized = to_BH.normalize();
-            Vec3f reflected_dir = rayDir - (planet_normal * 2.0f * rayDir.dot(planet_normal));
-            reflected_dir = reflected_dir.normalize();
-            float specular_factor = to_BH_normalized.dot(reflected_dir);
-            specular_factor = fmaxf(0.0f, specular_factor);
-            specular_factor = powf(specular_factor, 10.0f);
-            float diffuse_factor = to_BH_normalized.dot(planet_normal) * 0.2f;
-            diffuse_factor = fmaxf(0.0f, diffuse_factor);
-            float ambient_factor = 0.1f;
-            result.accumulatedColor = result.accumulatedColor + result.planetAlbedo * (light_color * (diffuse_factor + specular_factor) + bg_color * ambient_factor);
-            return result;
+            float tx = px_val / n_current;
+            float ty = py_val / n_current;
+            float t_len = sqrtf(tx * tx + ty * ty);
+            float vx_norm = tx / t_len;
+            float vy_norm = ty / t_len;
+            Vec3f current_dir = (x_axis_2d_plane * vx_norm + y_axis_2d_plane * vy_norm).normalize();
+            if (planet_normal.dot(current_dir) < 0.0f) {
+                result.hitPlanet = true;
+                result.planetAlbedo = getPlanetColor(current_pos_world);
+                Vec3f light_color(DISK_BASE_COLOR_R, DISK_BASE_COLOR_G, DISK_BASE_COLOR_B);
+                Vec3f bg_color(1.0f, 1.0f, 1.0f);   
+                
+                Vec3f to_BH = BH_POSITION - current_pos_world;
+                Vec3f to_BH_normalized = to_BH.normalize();
+                Vec3f reflected_dir = current_dir - (planet_normal * 2.0f * current_dir.dot(planet_normal));
+                reflected_dir = reflected_dir.normalize();
+                float specular_factor = to_BH_normalized.dot(reflected_dir);
+                specular_factor = fmaxf(0.0f, specular_factor);
+                specular_factor = powf(specular_factor, 6.0f)*0.5f;
+                float diffuse_factor = to_BH_normalized.dot(planet_normal);
+                diffuse_factor = fmaxf(0.0f, diffuse_factor) * 0.5f;
+                float ambient_factor = 0.1f;
+                if (!is_reflection) {
+                    RayTraceResult reflected_result = traceRayNearBlackHole(current_pos_world, reflected_dir, current_time, true);
+                    float reflection_factor = 0.5f;
+                    Vec3f reflected_color = reflected_result.accumulatedColor;
+                    if (reflected_result.hitPlanet || reflected_result.hitDisk) {
+                        result.accumulatedColor = result.accumulatedColor + result.planetAlbedo * (light_color * (diffuse_factor + specular_factor) + bg_color * ambient_factor) + reflected_color * reflection_factor;
+                    } else {
+                        result.accumulatedColor = result.accumulatedColor + result.planetAlbedo * (light_color * (diffuse_factor + specular_factor) + bg_color * ambient_factor);
+                    }
+                }
+                else{
+                    result.accumulatedColor = result.accumulatedColor + result.planetAlbedo * (light_color * (diffuse_factor + specular_factor) + bg_color * ambient_factor);
+                }
+                return result;
+            }
         }
         disk_distance_prev = disk_distance; // Store previous distance for crossing check
         disk_distance = (current_pos_world - BH_POSITION).dot(DISK_NORMAL_VEC);
@@ -296,7 +317,22 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
                 // Use current_pos_world as the point for color factor, assuming it's close enough to the actual intersection point
                 // The procedural color function in CPU demo used `current_pos_3d` (which is `current_pos_world` here)
                 // and `BH_POSITION` as `disk_center_on_plane`. This seems correct.
-                Vec3f disk_project = point_on_disk_plane_world - BH_POSITION;
+                float tx = px_val / n_current;
+                float ty = py_val / n_current;
+                float t_len = sqrtf(tx * tx + ty * ty);
+                float vx_norm = tx / t_len;
+                float vy_norm = ty / t_len;
+                Vec3f current_dir = (x_axis_2d_plane * vx_norm + y_axis_2d_plane * vy_norm).normalize();
+                float dot_factor = current_dir.dot(DISK_NORMAL_VEC);
+                Vec3f disk_project;
+                if (dot_factor != 0.0f) {
+
+                    disk_project = current_pos_world - BH_POSITION + current_dir * (-disk_distance_prev / dot_factor);
+                }
+                else{
+                    disk_project = current_pos_world - BH_POSITION;
+                }
+                
                 float disk_brightness_factor = getDiskProceduralColorFactor(Vec3f(disk_project.dot(DISK_X_AXIS), disk_project.dot(DISK_Y_AXIS), 0.0f), current_time);
                 if (disk_brightness_factor > 0.0f) {
                     result.hitDisk = true; // Mark that disk was hit at least once
@@ -304,13 +340,8 @@ RayTraceResult traceRayNearBlackHole(const Vec3f& rayOrigin, const Vec3f& rayDir
                     // Consider if only the first hit should count or if accumulation is desired.
                     // CPU demo seems to just set hitDisk and adds to accumulatedColor once.
                     // Let's stick to accumulating if it hits multiple times, can be adjusted.
-                    float tx = px_val / n_current;
-                    float ty = py_val / n_current;
-                    float t_len = sqrtf(tx * tx + ty * ty);
-                    float vx_norm = tx / t_len;
-                    float vy_norm = ty / t_len;
-                    Vec3f finalDir = (x_axis_2d_plane * vx_norm + y_axis_2d_plane * vy_norm).normalize();
-                    float dot_factor = finalDir.dot(DISK_NORMAL_VEC);
+
+                    
                     result.accumulatedColor = result.accumulatedColor + DISK_BASE_COLOR_VEC * disk_brightness_factor * (1.0f / (fabsf(dot_factor) + 0.1f));
                 }
             }
@@ -394,7 +425,7 @@ void renderPerspectiveKernel(
     float Py = (1.0f - 2.0f * ((float)j + 0.5f) / (float)outputHeight);
 
     Vec3f initialRayDirection = (viewDir + camRight * Px * (viewPlaneWidth / 2.0f) + camUp * Py * (viewPlaneHeight / 2.0f)).normalize();
-    RayTraceResult traceResult = traceRayNearBlackHole(camera.position, initialRayDirection, current_time);
+    RayTraceResult traceResult = traceRayNearBlackHole(camera.position, initialRayDirection, current_time, true);
 
     int pix_idx = (j * outputWidth + i) * 3;
     Vec3f finalColorBack(0.0f, 0.0f, 0.0f); // Initialize to black, as per CPU logic
@@ -768,10 +799,10 @@ int main() {
     std::cout << "Successfully read background BMP image with dimensions: " << bg_width << "x" << bg_height << std::endl;
 
     // Animation Parameters
-    const int num_frames = 300;
+    const int num_frames = 600;
     const float frame_rate = 24.0f;
-    const float orbit_radius = 80.0f;
-    const float camera_z_offset = 0.0f;
+    const float orbit_radius = 100.0f;
+    const float camera_z_offset = 10.0f;
 
     Vec3f worldUpVector(0.0f, 0.0f, 1.0f);
     float fieldOfViewY = 75.0f;
@@ -817,9 +848,9 @@ int main() {
         float angle =  2*PI * static_cast<float>(frame) / static_cast<float>(num_frames);
 
         Vec3f cameraPosition(
-            BH_POSITION_X + orbit_radius * std::cos(angle) + 10,
+            BH_POSITION_X + orbit_radius * std::cos(angle),
             BH_POSITION_Y + orbit_radius * std::sin(angle),
-            camera_z_offset + 10.0f
+            camera_z_offset
         );
         Vec3f lookAtTarget(BH_POSITION_X, BH_POSITION_Y, BH_POSITION_Z);
 
