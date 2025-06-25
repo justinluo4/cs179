@@ -1,5 +1,7 @@
 # cs179 final project: black hole raymarching engine
 
+![asdaf](image.png)
+
 This project is a raymarcher that simulates the schwartzchild metric around a black hole, rendering the accretion disk and background relative to the distorted spacetime. Additionally, objects in the scene can be rendered using a fully customizable signed distance function (SDF). Finally, a bloom kernel is run to add more photorealism to the image.  
 
 # How to Run
@@ -25,4 +27,3 @@ In the future, potential improvements include:
 - Multiple black holes
 - Textures for SDFs
 ![asdf](image_cubes.png)
-![asdaf](image.png)
